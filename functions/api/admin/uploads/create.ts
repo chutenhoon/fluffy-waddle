@@ -48,6 +48,17 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
     return errorJson(403, "Forbidden.");
   }
 
+  const missing = [
+    "R2_S3_ACCESS_KEY_ID",
+    "R2_S3_SECRET_ACCESS_KEY",
+    "R2_S3_ENDPOINT",
+    "R2_S3_BUCKET"
+  ].filter((key) => !env[key as keyof Env]);
+
+  if (missing.length > 0) {
+    return errorJson(500, `Missing R2 config: ${missing.join(", ")}`);
+  }
+
   let payload: {
     title?: string;
     fileName?: string;
@@ -78,15 +89,25 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
   const partSize = choosePartSize(sizeBytes);
   const totalParts = Math.ceil(sizeBytes / partSize);
 
-  const uploadId = await createMultipartUpload(env, r2Key, contentType);
+  let uploadId: string;
+  let parts: Array<{ partNumber: number; url: string }>;
 
-  const parts = await Promise.all(
-    Array.from({ length: totalParts }, async (_, index) => {
-      const partNumber = index + 1;
-      const url = await presignPartUpload(env, r2Key, uploadId, partNumber);
-      return { partNumber, url };
-    })
-  );
+  try {
+    uploadId = await createMultipartUpload(env, r2Key, contentType);
+
+    parts = await Promise.all(
+      Array.from({ length: totalParts }, async (_, index) => {
+        const partNumber = index + 1;
+        const url = await presignPartUpload(env, r2Key, uploadId, partNumber);
+        return { partNumber, url };
+      })
+    );
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "R2 upload init failed.";
+    console.error("upload create failed", message);
+    return errorJson(500, message);
+  }
 
   const now = new Date().toISOString();
   await env.DB.prepare(

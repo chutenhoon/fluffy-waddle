@@ -35,7 +35,14 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
     return errorJson(400, "Missing completion fields.");
   }
 
-  await completeMultipartUpload(env, r2Key, uploadId, parts);
+  try {
+    await completeMultipartUpload(env, r2Key, uploadId, parts);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "R2 upload finalize failed.";
+    console.error("upload complete failed", message);
+    return errorJson(500, message);
+  }
 
   const now = new Date().toISOString();
   await env.DB.prepare(
