@@ -10,7 +10,23 @@ function normalizeEndpoint(endpoint: string) {
 
 export function buildObjectUrl(env: Env, key: string) {
   const endpoint = normalizeEndpoint(env.R2_S3_ENDPOINT);
-  return `${endpoint}/${env.R2_S3_BUCKET}/${key}`;
+  const bucket = env.R2_S3_BUCKET;
+
+  try {
+    const url = new URL(endpoint);
+    const path = url.pathname.replace(/\/+$/, "");
+    if (path && path !== "/") {
+      const segments = path.split("/").filter(Boolean);
+      const last = segments[segments.length - 1];
+      if (last === bucket) {
+        return `${endpoint}/${key}`;
+      }
+    }
+  } catch {
+    // If the endpoint is not a valid URL, fall back to naive concatenation.
+  }
+
+  return `${endpoint}/${bucket}/${key}`;
 }
 
 export async function createMultipartUpload(
