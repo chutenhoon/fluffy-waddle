@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useIntersection } from "../hooks/useIntersection";
+import { useMediaQuery } from "../hooks/useMediaQuery";
 
 export type VideoItem = {
   id: string;
@@ -32,6 +33,8 @@ export default function VideoCard({ video }: { video: VideoItem }) {
   const [thumbLoaded, setThumbLoaded] = useState(false);
   const [thumbError, setThumbError] = useState(false);
   const [previewActive, setPreviewActive] = useState(false);
+  const [fallbackFrameReady, setFallbackFrameReady] = useState(false);
+  const isMobile = useMediaQuery("(max-width: 768px)");
 
   const isVisible = useIntersection(cardRef, {
     rootMargin: "200px",
@@ -49,6 +52,9 @@ export default function VideoCard({ video }: { video: VideoItem }) {
     [video.slug]
   );
 
+  const hasThumb = Boolean(video.thumbnail_key);
+  const showVideoFallback = !hasThumb && !isMobile;
+
   useEffect(() => {
     const element = videoRef.current;
     if (!element || !previewActive || !shouldLoad) return;
@@ -58,21 +64,58 @@ export default function VideoCard({ video }: { video: VideoItem }) {
     element.play().catch(() => undefined);
   }, [previewActive, shouldLoad, src]);
 
+  useEffect(() => {
+    const element = videoRef.current;
+    if (!element || !shouldLoad || !showVideoFallback) return;
+    if (!element.src) {
+      element.src = src;
+    }
+
+    const onLoaded = () => {
+      const target = Math.min(1, Math.max(0.1, element.duration * 0.05 || 0.1));
+      if (element.currentTime < target) {
+        try {
+          element.currentTime = target;
+        } catch {
+          setFallbackFrameReady(true);
+        }
+      }
+    };
+
+    const onSeeked = () => {
+      setFallbackFrameReady(true);
+      element.pause();
+    };
+
+    element.addEventListener("loadedmetadata", onLoaded);
+    element.addEventListener("seeked", onSeeked);
+
+    return () => {
+      element.removeEventListener("loadedmetadata", onLoaded);
+      element.removeEventListener("seeked", onSeeked);
+    };
+  }, [shouldLoad, showVideoFallback, src]);
+
   const handlePreviewStart = () => {
+    if (isMobile) return;
     if (!shouldLoad) setShouldLoad(true);
     setPreviewActive(true);
   };
 
   const handlePreviewStop = () => {
+    if (isMobile) return;
     setPreviewActive(false);
     const element = videoRef.current;
     if (element) {
       element.pause();
-      element.currentTime = 0;
+      if (!showVideoFallback) {
+        element.currentTime = 0;
+      }
     }
   };
 
   const thumbSrc = `/api/videos/${video.slug}/thumb`;
+  const videoVisible = previewActive || (showVideoFallback && fallbackFrameReady);
 
   return (
     <Link
@@ -89,10 +132,19 @@ export default function VideoCard({ video }: { video: VideoItem }) {
         onBlur={handlePreviewStop}
       >
         <div className="relative aspect-video bg-black/40">
-          {!thumbLoaded && !thumbError ? (
+          {(hasThumb && !thumbLoaded && !thumbError) ||
+          (!hasThumb && !fallbackFrameReady) ? (
             <div className="absolute inset-0 bg-white/5 animate-pulse" />
           ) : null}
-          {!thumbError ? (
+
+          <img
+            src={poster}
+            alt=""
+            aria-hidden="true"
+            className="h-full w-full object-cover"
+          />
+
+          {hasThumb && !thumbError ? (
             <img
               src={thumbSrc}
               alt={video.title}
@@ -102,18 +154,11 @@ export default function VideoCard({ video }: { video: VideoItem }) {
                 setThumbError(true);
                 setThumbLoaded(true);
               }}
-              className={`h-full w-full object-cover transition-opacity duration-300 ${
+              className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ${
                 thumbLoaded ? "opacity-100" : "opacity-0"
               }`}
             />
-          ) : (
-            <img
-              src={poster}
-              alt=""
-              aria-hidden="true"
-              className="h-full w-full object-cover"
-            />
-          )}
+          ) : null}
 
           <video
             ref={videoRef}
@@ -122,7 +167,7 @@ export default function VideoCard({ video }: { video: VideoItem }) {
             playsInline
             preload={shouldLoad ? "metadata" : "none"}
             className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ${
-              previewActive ? "opacity-100" : "opacity-0"
+              videoVisible ? "opacity-100" : "opacity-0"
             }`}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />

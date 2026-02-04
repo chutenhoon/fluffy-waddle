@@ -109,6 +109,7 @@ export default function VideoPlayer({ src }: { src: string }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const hideTimer = useRef<number | undefined>(undefined);
+  const bufferWaitStart = useRef<number | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [duration, setDuration] = useState(0);
@@ -119,7 +120,8 @@ export default function VideoPlayer({ src }: { src: string }) {
   const [isBuffering, setIsBuffering] = useState(true);
   const [pendingPlay, setPendingPlay] = useState(false);
   const isMobile = useMediaQuery("(max-width: 768px)");
-  const minBufferRatio = isMobile ? 0.5 : 0.2;
+  const targetBufferAhead = isMobile ? Math.min(duration * 0.5, 45) : 6;
+  const minBufferAhead = isMobile ? 4 : 2;
 
   useEffect(() => {
     const element = videoRef.current;
@@ -156,25 +158,24 @@ export default function VideoPlayer({ src }: { src: string }) {
     const element = videoRef.current;
     if (!element) return;
     if (element.paused) {
-      const ratio = element.duration ? buffered / element.duration : 1;
-      if (isMobile && ratio < minBufferRatio) {
+      const bufferAhead = Math.max(0, buffered - element.currentTime);
+      if (isMobile && bufferAhead < targetBufferAhead) {
         setPendingPlay(true);
         setIsBuffering(true);
-        element
-          .play()
-          .then(() => {
-            element.pause();
-          })
-          .catch(() => undefined);
+        if (!bufferWaitStart.current) {
+          bufferWaitStart.current = performance.now();
+        }
+        element.play().then(() => element.pause()).catch(() => undefined);
         return;
       }
       element.play().catch(() => undefined);
     } else {
       element.pause();
       setPendingPlay(false);
+      bufferWaitStart.current = null;
     }
     revealControls();
-  }, [buffered, isMobile, minBufferRatio, revealControls]);
+  }, [buffered, isMobile, revealControls, targetBufferAhead]);
 
   useEffect(() => {
     const element = videoRef.current;
@@ -183,6 +184,7 @@ export default function VideoPlayer({ src }: { src: string }) {
     const onPlay = () => {
       setIsPlaying(true);
       setIsBuffering(false);
+      bufferWaitStart.current = null;
       scheduleHide();
     };
     const onPause = () => setIsPlaying(false);
@@ -229,12 +231,32 @@ export default function VideoPlayer({ src }: { src: string }) {
   useEffect(() => {
     if (!pendingPlay) return;
     if (!duration) return;
-    const ratio = buffered / duration;
-    if (ratio >= minBufferRatio) {
+    const bufferAhead = Math.max(0, buffered - currentTime);
+    const waited = bufferWaitStart.current
+      ? performance.now() - bufferWaitStart.current
+      : 0;
+    if (bufferAhead >= targetBufferAhead || waited > 8000) {
       setPendingPlay(false);
+      bufferWaitStart.current = null;
       videoRef.current?.play().catch(() => undefined);
     }
-  }, [buffered, duration, minBufferRatio, pendingPlay]);
+  }, [
+    buffered,
+    currentTime,
+    duration,
+    pendingPlay,
+    targetBufferAhead
+  ]);
+
+  useEffect(() => {
+    if (!isMobile || !isPlaying) return;
+    const bufferAhead = Math.max(0, buffered - currentTime);
+    if (bufferAhead < minBufferAhead) {
+      setPendingPlay(true);
+      setIsBuffering(true);
+      videoRef.current?.pause();
+    }
+  }, [buffered, currentTime, isMobile, isPlaying, minBufferAhead]);
 
   useEffect(() => {
     const container = containerRef.current;

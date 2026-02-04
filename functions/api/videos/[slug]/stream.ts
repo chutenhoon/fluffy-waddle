@@ -14,7 +14,11 @@ export const onRequest: PagesFunction<Env> = async ({ env, request, params }) =>
   if (!row?.r2_key) return errorJson(404, "Not found.");
 
   const rangeHeader = request.headers.get("Range");
-  const size = row.size_bytes || 0;
+  let size = row.size_bytes || 0;
+  if (!size) {
+    const head = await env.R2_VIDEOS.head(row.r2_key);
+    size = head?.size || 0;
+  }
 
   let object: R2ObjectBody | null = null;
   let status = 200;
