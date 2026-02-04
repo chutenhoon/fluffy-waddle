@@ -9,8 +9,8 @@ function normalizeEndpoint(endpoint: string) {
 }
 
 export function buildObjectUrl(env: Env, key: string) {
-  const endpoint = normalizeEndpoint(env.R2_S3_ENDPOINT);
-  const bucket = env.R2_S3_BUCKET;
+  const endpoint = normalizeEndpoint(env.R2_S3_ENDPOINT.trim());
+  const bucket = env.R2_S3_BUCKET.trim();
 
   try {
     const url = new URL(endpoint);
@@ -34,6 +34,8 @@ export async function createMultipartUpload(
   key: string,
   contentType: string
 ) {
+  const accessKeyId = env.R2_S3_ACCESS_KEY_ID.trim();
+  const secretAccessKey = env.R2_S3_SECRET_ACCESS_KEY.trim();
   const url = `${buildObjectUrl(env, key)}?uploads`;
   const headers = await signRequest({
     method: "POST",
@@ -42,8 +44,8 @@ export async function createMultipartUpload(
       "content-type": contentType
     },
     body: "",
-    accessKeyId: env.R2_S3_ACCESS_KEY_ID,
-    secretAccessKey: env.R2_S3_SECRET_ACCESS_KEY,
+    accessKeyId,
+    secretAccessKey,
     region: REGION
   });
 
@@ -72,6 +74,8 @@ export async function presignPartUpload(
   uploadId: string,
   partNumber: number
 ) {
+  const accessKeyId = env.R2_S3_ACCESS_KEY_ID.trim();
+  const secretAccessKey = env.R2_S3_SECRET_ACCESS_KEY.trim();
   const url = buildObjectUrl(env, key);
   return presignUrl({
     method: "PUT",
@@ -80,8 +84,8 @@ export async function presignPartUpload(
       partNumber: partNumber.toString(),
       uploadId
     },
-    accessKeyId: env.R2_S3_ACCESS_KEY_ID,
-    secretAccessKey: env.R2_S3_SECRET_ACCESS_KEY,
+    accessKeyId,
+    secretAccessKey,
     region: REGION,
     expires: PRESIGN_EXPIRES
   });
@@ -93,6 +97,8 @@ export async function completeMultipartUpload(
   uploadId: string,
   parts: Array<{ partNumber: number; etag: string }>
 ) {
+  const accessKeyId = env.R2_S3_ACCESS_KEY_ID.trim();
+  const secretAccessKey = env.R2_S3_SECRET_ACCESS_KEY.trim();
   const sorted = [...parts].sort((a, b) => a.partNumber - b.partNumber);
   const body = `<?xml version="1.0" encoding="UTF-8"?>\n<CompleteMultipartUpload>\n${sorted
     .map(
@@ -112,8 +118,8 @@ export async function completeMultipartUpload(
       "content-type": "application/xml"
     },
     body,
-    accessKeyId: env.R2_S3_ACCESS_KEY_ID,
-    secretAccessKey: env.R2_S3_SECRET_ACCESS_KEY,
+    accessKeyId,
+    secretAccessKey,
     region: REGION
   });
 
@@ -134,6 +140,8 @@ export async function listMultipartParts(
   key: string,
   uploadId: string
 ) {
+  const accessKeyId = env.R2_S3_ACCESS_KEY_ID.trim();
+  const secretAccessKey = env.R2_S3_SECRET_ACCESS_KEY.trim();
   let marker = 0;
   const collected: Array<{ partNumber: number; etag: string }> = [];
 
@@ -147,8 +155,8 @@ export async function listMultipartParts(
       url,
       headers: {},
       body: "",
-      accessKeyId: env.R2_S3_ACCESS_KEY_ID,
-      secretAccessKey: env.R2_S3_SECRET_ACCESS_KEY,
+      accessKeyId,
+      secretAccessKey,
       region: REGION
     });
 
