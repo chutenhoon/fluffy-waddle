@@ -6,16 +6,16 @@ export const onRequest: PagesFunction<Env> = async ({ env, params }) => {
   if (!slug) return errorJson(400, "Missing slug.");
 
   const row = await env.DB.prepare(
-    "SELECT thumbnail_key FROM videos WHERE slug = ? AND status = ?"
+    "SELECT COALESCE(thumb_key, thumbnail_key) as thumb_key FROM videos WHERE slug = ? AND status = ?"
   )
     .bind(slug, "ready")
-    .first<{ thumbnail_key: string | null }>();
+    .first<{ thumb_key: string | null }>();
 
-  if (!row?.thumbnail_key) {
+  if (!row?.thumb_key) {
     return errorJson(404, "Not found.");
   }
 
-  const object = await env.R2_VIDEOS.get(row.thumbnail_key);
+  const object = await env.R2_VIDEOS.get(row.thumb_key);
   if (!object) {
     return errorJson(404, "Not found.");
   }

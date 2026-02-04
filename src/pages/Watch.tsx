@@ -16,6 +16,20 @@ type VideoDetail = {
   thumbnail_key?: string | null;
 };
 
+const posterSvg = encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+    <defs>
+      <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#0d1014" />
+        <stop offset="1" stop-color="#121820" />
+      </linearGradient>
+    </defs>
+    <rect width="1280" height="720" fill="url(#g)" />
+  </svg>`
+);
+
+const fallbackPoster = `data:image/svg+xml,${posterSvg}`;
+
 export default function Watch() {
   const { slug } = useParams();
   const [theaterMode, setTheaterMode] = useState(false);
@@ -80,7 +94,7 @@ export default function Watch() {
 
   const posterSrc = data.thumbnail_key
     ? `/api/videos/${data.slug}/thumb`
-    : undefined;
+    : fallbackPoster;
 
   return (
     <div className="min-h-screen px-5 py-6 md:px-10">
