@@ -402,7 +402,7 @@ export default function VideoPlayer({
     <div
       ref={containerRef}
       className={`glass-panel video-shell w-full mx-auto overflow-hidden ${
-        theaterMode ? "max-w-none" : "max-w-[1400px]"
+        theaterMode ? "max-w-[1800px]" : "max-w-[1600px]"
       }`}
     >
       <div
