@@ -163,12 +163,16 @@ export async function presignUrl(params: {
   const dateStamp = amzDate.slice(0, 8);
   const credentialScope = `${dateStamp}/${region}/s3/aws4_request`;
 
-  const headerEntries = Object.entries(headers)
+  const extraHeaderEntries = Object.entries(headers)
     .map(([key, value]) => [key.toLowerCase(), value.trim().replace(/\s+/g, " ")])
-    .filter(([key]) => key !== "host")
-    .sort((a, b) => a[0].localeCompare(b[0]));
+    .filter(([key]) => key !== "host");
 
-  const signedHeaders = ["host", ...headerEntries.map(([key]) => key)].join(";");
+  const headerEntries = [
+    ["host", parsedUrl.host],
+    ...extraHeaderEntries
+  ].sort((a, b) => a[0].localeCompare(b[0]));
+
+  const signedHeaders = headerEntries.map(([key]) => key).join(";");
   const queryParams: Record<string, string> = {
     ...query,
     "X-Amz-Algorithm": "AWS4-HMAC-SHA256",
@@ -178,9 +182,9 @@ export async function presignUrl(params: {
     "X-Amz-SignedHeaders": signedHeaders
   };
 
-  const canonicalHeaders =
-    `host:${parsedUrl.host}\n` +
-    headerEntries.map(([key, value]) => `${key}:${value}\n`).join("");
+  const canonicalHeaders = headerEntries
+    .map(([key, value]) => `${key}:${value}\n`)
+    .join("");
 
   const canonicalRequest = [
     method,
