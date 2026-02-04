@@ -87,7 +87,7 @@ export default function Watch() {
 
         {theaterMode ? (
           <div className="space-y-8">
-            <div className="flex justify-center">
+            <div className="w-full">
               <VideoPlayer
                 src={`/api/videos/${data.slug}/stream`}
                 poster={posterSrc}

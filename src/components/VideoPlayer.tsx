@@ -401,9 +401,7 @@ export default function VideoPlayer({
   return (
     <div
       ref={containerRef}
-      className={`glass-panel video-shell w-full mx-auto overflow-hidden ${
-        theaterMode ? "max-w-[1800px]" : "max-w-[1600px]"
-      }`}
+      className="glass-panel video-shell w-full mx-auto overflow-hidden"
     >
       <div
         className={`relative bg-black/80 aspect-video ${
