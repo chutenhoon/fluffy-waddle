@@ -5,6 +5,7 @@ import {
   useState,
   type ReactNode
 } from "react";
+import Hls from "hls.js";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 
 const HIDE_DELAY = 2200;
@@ -116,11 +117,15 @@ function ControlButton({
 
 export default function VideoPlayer({
   src,
+  hlsSrc,
+  preferHls = false,
   poster,
   theaterMode = false,
   onToggleTheater
 }: {
   src: string;
+  hlsSrc?: string;
+  preferHls?: boolean;
   poster?: string;
   theaterMode?: boolean;
   onToggleTheater?: () => void;
@@ -156,8 +161,56 @@ export default function VideoPlayer({
     element.setAttribute("webkit-playsinline", "");
     element.playsInline = true;
     element.preload = "auto";
-    element.load();
-  }, [src]);
+  }, []);
+
+  useEffect(() => {
+    const element = videoRef.current;
+    if (!element) return;
+    let hls: Hls | null = null;
+
+    const useHls = Boolean(hlsSrc && preferHls);
+    const handleNativeError = () => {
+      if (useHls && hlsSrc && element.src === hlsSrc) {
+        element.src = src;
+        element.load();
+      }
+    };
+    element.addEventListener("error", handleNativeError);
+
+    if (useHls && hlsSrc) {
+      const nativeSupport =
+        element.canPlayType("application/vnd.apple.mpegurl") ||
+        element.canPlayType("application/x-mpegURL");
+      if (nativeSupport) {
+        element.src = hlsSrc;
+        element.load();
+      } else if (Hls.isSupported()) {
+        hls = new Hls();
+        hls.on(Hls.Events.ERROR, (_, data) => {
+          if (data?.fatal) {
+            hls?.destroy();
+            element.src = src;
+            element.load();
+          }
+        });
+        hls.loadSource(hlsSrc);
+        hls.attachMedia(element);
+      } else {
+        element.src = src;
+        element.load();
+      }
+    } else {
+      element.src = src;
+      element.load();
+    }
+
+    return () => {
+      element.removeEventListener("error", handleNativeError);
+      if (hls) {
+        hls.destroy();
+      }
+    };
+  }, [src, hlsSrc, preferHls]);
 
   useEffect(() => {
     if (!videoRef.current) return;
@@ -415,7 +468,6 @@ export default function VideoPlayer({
       >
         <video
           ref={videoRef}
-          src={src}
           poster={poster}
           className="w-full h-full object-contain"
           playsInline

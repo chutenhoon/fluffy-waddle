@@ -19,6 +19,7 @@ type VideoDetail = {
 export default function Watch() {
   const { slug } = useParams();
   const [theaterMode, setTheaterMode] = useState(false);
+  const [preferHls, setPreferHls] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ["video", slug],
@@ -45,6 +46,18 @@ export default function Watch() {
     if (saved) {
       setTheaterMode(saved === "1");
     }
+  }, []);
+
+  useEffect(() => {
+    if (typeof navigator === "undefined") return;
+    const ua = navigator.userAgent.toLowerCase();
+    const isMobile =
+      ua.includes("android") ||
+      ua.includes("iphone") ||
+      ua.includes("ipad") ||
+      ua.includes("ipod") ||
+      ua.includes("mobile");
+    setPreferHls(isMobile);
   }, []);
 
   useEffect(() => {
@@ -90,6 +103,8 @@ export default function Watch() {
             <div className="w-full">
               <VideoPlayer
                 src={`/api/videos/${data.slug}/stream`}
+                hlsSrc={`/api/videos/${data.slug}/hls/index.m3u8`}
+                preferHls={preferHls}
                 poster={posterSrc}
                 theaterMode
                 onToggleTheater={() => setTheaterMode((prev) => !prev)}
@@ -122,6 +137,8 @@ export default function Watch() {
             <div className="space-y-6">
               <VideoPlayer
                 src={`/api/videos/${data.slug}/stream`}
+                hlsSrc={`/api/videos/${data.slug}/hls/index.m3u8`}
+                preferHls={preferHls}
                 poster={posterSrc}
                 theaterMode={false}
                 onToggleTheater={() => setTheaterMode((prev) => !prev)}
