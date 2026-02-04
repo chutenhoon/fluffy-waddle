@@ -14,6 +14,15 @@ export default function Gallery() {
     queryFn: () => apiFetch<VideoItem[]>("/api/videos")
   });
 
+  const filtered = useMemo(() => {
+    if (!data) return [];
+    const needle = query.trim().toLowerCase();
+    if (!needle) return data;
+    return data.filter((video) =>
+      video.title.toLowerCase().includes(needle)
+    );
+  }, [data, query]);
+
   const handleLogout = async () => {
     await apiFetchVoid("/api/auth/logout", { method: "POST" });
     navigate("/login", { replace: true });
@@ -27,15 +36,6 @@ export default function Gallery() {
       />
     );
   }
-
-  const filtered = useMemo(() => {
-    if (!data) return [];
-    const needle = query.trim().toLowerCase();
-    if (!needle) return data;
-    return data.filter((video) =>
-      video.title.toLowerCase().includes(needle)
-    );
-  }, [data, query]);
 
   return (
     <div className="min-h-screen px-5 py-8 md:px-10">

@@ -137,11 +137,18 @@ export default function VideoPlayer({
   const [isBuffering, setIsBuffering] = useState(true);
   const [pendingPlay, setPendingPlay] = useState(false);
   const isMobile = useMediaQuery("(max-width: 768px)");
-  const targetBufferAhead = isMobile ? Math.min(duration * 0.5, 45) : 6;
+  const targetBufferAhead = isMobile
+    ? duration
+      ? Math.min(duration * 0.5, 120)
+      : 30
+    : 6;
 
   useEffect(() => {
     const element = videoRef.current;
     if (!element) return;
+    element.setAttribute("playsinline", "");
+    element.setAttribute("webkit-playsinline", "");
+    element.playsInline = true;
     element.preload = "auto";
     element.load();
   }, [src]);
@@ -259,7 +266,8 @@ export default function VideoPlayer({
     const waited = bufferWaitStart.current
       ? performance.now() - bufferWaitStart.current
       : 0;
-    const fallbackTarget = duration ? targetBufferAhead : 6;
+    const fallbackTarget =
+      targetBufferAhead || (isMobile ? 30 : 6);
     if (bufferAhead >= fallbackTarget || waited > 6000) {
       setPendingPlay(false);
       bufferWaitStart.current = null;

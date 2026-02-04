@@ -53,7 +53,7 @@ export default function VideoCard({ video }: { video: VideoItem }) {
   );
 
   const hasThumb = Boolean(video.thumbnail_key);
-  const showVideoFallback = !hasThumb && !isMobile;
+  const showVideoFallback = (!hasThumb || thumbError) && !isMobile;
 
   useEffect(() => {
     const element = videoRef.current;
@@ -135,8 +135,8 @@ export default function VideoCard({ video }: { video: VideoItem }) {
         onBlur={handlePreviewStop}
       >
         <div className="relative aspect-video bg-black/40">
-          {(hasThumb && !thumbLoaded && !thumbError) ||
-          (!hasThumb && !fallbackFrameReady) ? (
+          {(!thumbError && hasThumb && !thumbLoaded) ||
+          (showVideoFallback && !fallbackFrameReady) ? (
             <div className="absolute inset-0 bg-white/5 animate-pulse" />
           ) : null}
 
