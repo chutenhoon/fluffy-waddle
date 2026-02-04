@@ -117,7 +117,16 @@ export default function VideoPlayer({ src }: { src: string }) {
   const [volume, setVolume] = useState(0.8);
   const [muted, setMuted] = useState(false);
   const [isBuffering, setIsBuffering] = useState(true);
+  const [pendingPlay, setPendingPlay] = useState(false);
   const isMobile = useMediaQuery("(max-width: 768px)");
+  const minBufferRatio = isMobile ? 0.5 : 0.2;
+
+  useEffect(() => {
+    const element = videoRef.current;
+    if (!element) return;
+    element.preload = "auto";
+    element.load();
+  }, [src]);
 
   useEffect(() => {
     if (!videoRef.current) return;
@@ -147,12 +156,25 @@ export default function VideoPlayer({ src }: { src: string }) {
     const element = videoRef.current;
     if (!element) return;
     if (element.paused) {
+      const ratio = element.duration ? buffered / element.duration : 1;
+      if (isMobile && ratio < minBufferRatio) {
+        setPendingPlay(true);
+        setIsBuffering(true);
+        element
+          .play()
+          .then(() => {
+            element.pause();
+          })
+          .catch(() => undefined);
+        return;
+      }
       element.play().catch(() => undefined);
     } else {
       element.pause();
+      setPendingPlay(false);
     }
     revealControls();
-  }, [revealControls]);
+  }, [buffered, isMobile, minBufferRatio, revealControls]);
 
   useEffect(() => {
     const element = videoRef.current;
@@ -203,6 +225,16 @@ export default function VideoPlayer({ src }: { src: string }) {
       element.removeEventListener("progress", onProgress);
     };
   }, [scheduleHide]);
+
+  useEffect(() => {
+    if (!pendingPlay) return;
+    if (!duration) return;
+    const ratio = buffered / duration;
+    if (ratio >= minBufferRatio) {
+      setPendingPlay(false);
+      videoRef.current?.play().catch(() => undefined);
+    }
+  }, [buffered, duration, minBufferRatio, pendingPlay]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -282,7 +314,11 @@ export default function VideoPlayer({ src }: { src: string }) {
     }
 
     const target = container.requestFullscreen ? container : video;
-    target.requestFullscreen().catch(() => undefined);
+    target.requestFullscreen().catch(() => {
+      if (video.requestFullscreen) {
+        video.requestFullscreen().catch(() => undefined);
+      }
+    });
 
     const orientation = screen.orientation;
     if (orientation?.lock) {
@@ -292,12 +328,13 @@ export default function VideoPlayer({ src }: { src: string }) {
 
   const progressPercent = duration ? (currentTime / duration) * 100 : 0;
   const bufferedPercent = duration ? (buffered / duration) * 100 : 0;
-  const shouldShowControls = showControls || !isPlaying || isBuffering;
+  const showBuffering = isBuffering || pendingPlay;
+  const shouldShowControls = showControls || !isPlaying || showBuffering;
 
   return (
     <div
       ref={containerRef}
-      className="glass-panel w-full max-w-5xl mx-auto overflow-hidden"
+      className="glass-panel video-shell w-full max-w-5xl mx-auto overflow-hidden"
     >
       <div className="relative bg-black/80">
         <video
@@ -309,13 +346,13 @@ export default function VideoPlayer({ src }: { src: string }) {
           onClick={togglePlay}
         />
 
-        {isBuffering ? (
+        {showBuffering ? (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="loader-ring" />
           </div>
         ) : null}
 
-        {!isPlaying && !isBuffering ? (
+        {!isPlaying && !showBuffering ? (
           <button
             onClick={togglePlay}
             aria-label="Play"

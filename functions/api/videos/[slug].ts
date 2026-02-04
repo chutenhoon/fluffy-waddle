@@ -6,7 +6,7 @@ export const onRequest: PagesFunction<Env> = async ({ env, params }) => {
   if (!slug) return errorJson(400, "Missing slug.");
 
   const row = await env.DB.prepare(
-    "SELECT id, slug, title, created_at, size_bytes, status FROM videos WHERE slug = ?"
+    "SELECT id, slug, title, created_at, size_bytes, status, thumbnail_key FROM videos WHERE slug = ?"
   )
     .bind(slug)
     .first();

@@ -8,6 +8,8 @@ type CreateUploadResponse = {
   uploadId: string;
   partSize: number;
   parts: Array<{ partNumber: number; url: string }>;
+  thumbnailKey?: string | null;
+  thumbnailUploadUrl?: string | null;
 };
 
 type UploadPart = {
@@ -28,6 +30,7 @@ type UploadState =
   | "done";
 
 const MAX_CONCURRENCY = 3;
+const THUMB_SIZE = 640;
 
 export default function Admin() {
   const [adminKey, setAdminKey] = useState(
@@ -39,6 +42,19 @@ export default function Admin() {
   const [parts, setParts] = useState<UploadPart[]>([]);
   const [status, setStatus] = useState<UploadState>("idle");
   const [error, setError] = useState<string | null>(null);
+  const [thumbnailBlob, setThumbnailBlob] = useState<Blob | null>(null);
+  const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
+  const [thumbnailStatus, setThumbnailStatus] = useState<
+    "idle" | "generating" | "ready" | "uploading" | "error"
+  >("idle");
+  const [thumbnailUploaded, setThumbnailUploaded] = useState(false);
+
+  const clearThumbnailPreview = () => {
+    if (thumbnailPreview) {
+      URL.revokeObjectURL(thumbnailPreview);
+      setThumbnailPreview(null);
+    }
+  };
 
   const partSizeFor = useCallback(
     (part: UploadPart) => {
@@ -72,12 +88,98 @@ export default function Admin() {
     sessionStorage.setItem("vms_admin_key", value);
   };
 
+  const generateThumbnail = async (videoFile: File) => {
+    setThumbnailStatus("generating");
+    clearThumbnailPreview();
+    setThumbnailUploaded(false);
+
+    const url = URL.createObjectURL(videoFile);
+    const video = document.createElement("video");
+    video.preload = "metadata";
+    video.muted = true;
+    video.playsInline = true;
+    video.src = url;
+
+    const cleanup = () => {
+      URL.revokeObjectURL(url);
+    };
+
+    const capture = () => {
+      const ratio =
+        video.videoWidth > 0 && video.videoHeight > 0
+          ? video.videoHeight / video.videoWidth
+          : 9 / 16;
+      const width = THUMB_SIZE;
+      const height = Math.round(width * ratio);
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        cleanup();
+        setThumbnailStatus("error");
+        return;
+      }
+      ctx.drawImage(video, 0, 0, width, height);
+      canvas.toBlob(
+        (blob) => {
+          cleanup();
+          if (!blob) {
+            setThumbnailStatus("error");
+            return;
+          }
+          setThumbnailBlob(blob);
+          setThumbnailPreview(URL.createObjectURL(blob));
+          setThumbnailStatus("ready");
+        },
+        "image/jpeg",
+        0.8
+      );
+    };
+
+    const onLoaded = () => {
+      const target = Number.isFinite(video.duration)
+        ? Math.min(1, Math.max(0.1, video.duration * 0.1))
+        : 0;
+      try {
+        video.currentTime = target;
+      } catch {
+        capture();
+      }
+    };
+
+    const onSeeked = () => capture();
+    const onError = () => {
+      cleanup();
+      setThumbnailStatus("error");
+    };
+
+    video.addEventListener("loadedmetadata", onLoaded, { once: true });
+    video.addEventListener("seeked", onSeeked, { once: true });
+    video.addEventListener("error", onError, { once: true });
+  };
+
+  const handleThumbnailFile = (fileValue: File | null) => {
+    if (!fileValue) {
+      setThumbnailBlob(null);
+      setThumbnailStatus("idle");
+      clearThumbnailPreview();
+      return;
+    }
+    setThumbnailBlob(fileValue);
+    clearThumbnailPreview();
+    setThumbnailPreview(URL.createObjectURL(fileValue));
+    setThumbnailStatus("ready");
+    setThumbnailUploaded(false);
+  };
+
   const handleCreate = async () => {
     if (!file || !title || !adminKey) return;
     setError(null);
     setStatus("creating");
 
     try {
+      setThumbnailUploaded(false);
       const response = await apiFetch<CreateUploadResponse>(
         "/api/admin/uploads/create",
         {
@@ -89,7 +191,8 @@ export default function Admin() {
             title,
             fileName: file.name,
             sizeBytes: file.size,
-            contentType: file.type
+            contentType: file.type,
+            thumbnailContentType: thumbnailBlob?.type || undefined
           })
         }
       );
@@ -102,12 +205,30 @@ export default function Admin() {
           progress: 0
         }))
       );
+
+      if (thumbnailBlob && response.thumbnailUploadUrl && response.thumbnailKey) {
+        setThumbnailStatus("uploading");
+        const uploadResponse = await fetch(response.thumbnailUploadUrl, {
+          method: "PUT",
+          headers: {
+            "Content-Type": thumbnailBlob.type || "image/jpeg"
+          },
+          body: thumbnailBlob
+        });
+        if (!uploadResponse.ok) {
+          throw new Error("Thumbnail upload failed.");
+        }
+        setThumbnailUploaded(true);
+        setThumbnailStatus("ready");
+      }
+
       setStatus("idle");
     } catch (err) {
       const message =
         err instanceof ApiError ? err.message : "Unable to start upload.";
       setError(message);
       setStatus("idle");
+      setThumbnailStatus("error");
     }
   };
 
@@ -220,6 +341,7 @@ export default function Admin() {
           uploadId: session.uploadId,
           r2Key: session.r2Key,
           sizeBytes: file.size,
+          thumbnailKey: thumbnailUploaded ? session.thumbnailKey : null,
           totalParts: parts.length,
           parts: parts
             .filter((part) => part.etag)
@@ -269,7 +391,9 @@ export default function Admin() {
     }
   };
 
-  const canStart = Boolean(file && title && adminKey);
+  const canStart = Boolean(
+    file && title && adminKey && thumbnailStatus !== "generating"
+  );
 
   return (
     <div className="min-h-screen px-5 py-8 md:px-10">
@@ -312,9 +436,44 @@ export default function Admin() {
             <input
               type="file"
               accept="video/*"
-              onChange={(event) => setFile(event.target.files?.[0] || null)}
+              onChange={(event) => {
+                const nextFile = event.target.files?.[0] || null;
+                setFile(nextFile);
+                if (nextFile) {
+                  generateThumbnail(nextFile);
+                } else {
+                  setThumbnailBlob(null);
+                  setThumbnailStatus("idle");
+                  clearThumbnailPreview();
+                }
+              }}
               className="w-full text-sm text-white/70"
             />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs text-white/40">
+              Thumbnail (optional)
+            </label>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(event) =>
+                handleThumbnailFile(event.target.files?.[0] || null)
+              }
+              className="w-full text-sm text-white/70"
+            />
+            <div className="flex items-center gap-3 text-xs text-white/50">
+              <span>Status: {thumbnailStatus}</span>
+              {thumbnailUploaded ? <span>Uploaded</span> : null}
+            </div>
+            {thumbnailPreview ? (
+              <img
+                src={thumbnailPreview}
+                alt="Thumbnail preview"
+                className="h-24 w-40 rounded-lg object-cover border border-white/10"
+              />
+            ) : null}
           </div>
 
           <div className="flex flex-wrap gap-3">

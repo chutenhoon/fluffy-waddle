@@ -3,7 +3,8 @@ import { errorJson, json } from "../../../_lib/response";
 import { uniqueSlug } from "../../../_lib/slug";
 import {
   createMultipartUpload,
-  presignPartUpload
+  presignPartUpload,
+  presignObjectUpload
 } from "../../../_lib/r2Multipart";
 
 const ALLOWED_TYPES = new Set([
@@ -11,6 +12,12 @@ const ALLOWED_TYPES = new Set([
   "video/quicktime",
   "video/webm",
   "video/ogg"
+]);
+
+const ALLOWED_THUMB_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp"
 ]);
 
 function requireAdmin(request: Request, env: Env) {
@@ -34,6 +41,12 @@ function inferContentType(fileName: string) {
   if (lower.endsWith(".webm")) return "video/webm";
   if (lower.endsWith(".ogg") || lower.endsWith(".ogv")) return "video/ogg";
   return "";
+}
+
+function extForContentType(contentType: string) {
+  if (contentType === "image/png") return "png";
+  if (contentType === "image/webp") return "webp";
+  return "jpg";
 }
 
 function choosePartSize(sizeBytes: number) {
@@ -73,6 +86,7 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
     fileName?: string;
     sizeBytes?: number;
     contentType?: string;
+    thumbnailContentType?: string;
   } = {};
 
   try {
@@ -81,7 +95,8 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
     return errorJson(400, "Invalid request.");
   }
 
-  const { title, fileName, sizeBytes, contentType } = payload;
+  const { title, fileName, sizeBytes, contentType, thumbnailContentType } =
+    payload;
   const resolvedContentType = contentType || inferContentType(fileName || "");
   if (!title || !fileName || !sizeBytes) {
     return errorJson(400, "Missing upload fields.");
@@ -89,6 +104,10 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
 
   if (!resolvedContentType || !ALLOWED_TYPES.has(resolvedContentType)) {
     return errorJson(400, "Unsupported video format.");
+  }
+
+  if (thumbnailContentType && !ALLOWED_THUMB_TYPES.has(thumbnailContentType)) {
+    return errorJson(400, "Unsupported thumbnail format.");
   }
 
   const videoId = crypto.randomUUID();
@@ -101,6 +120,8 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
 
   let uploadId: string;
   let parts: Array<{ partNumber: number; url: string }>;
+  let thumbnailKey: string | null = null;
+  let thumbnailUploadUrl: string | null = null;
 
   try {
     uploadId = await createMultipartUpload(env, r2Key, resolvedContentType);
@@ -112,6 +133,12 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
         return { partNumber, url };
       })
     );
+
+    if (thumbnailContentType) {
+      const ext = extForContentType(thumbnailContentType);
+      thumbnailKey = `thumbs/${videoId}/thumb.${ext}`;
+      thumbnailUploadUrl = await presignObjectUpload(env, thumbnailKey);
+    }
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "R2 upload init failed.";
@@ -132,6 +159,8 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
     r2Key,
     uploadId,
     partSize,
-    parts
+    parts,
+    thumbnailKey,
+    thumbnailUploadUrl
   });
 };

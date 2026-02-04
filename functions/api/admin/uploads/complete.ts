@@ -26,6 +26,7 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
     sizeBytes?: number;
     parts?: Array<{ partNumber: number; etag?: string }>;
     totalParts?: number;
+    thumbnailKey?: string | null;
   } = {};
 
   try {
@@ -34,7 +35,8 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
     return errorJson(400, "Invalid request.");
   }
 
-  const { videoId, uploadId, r2Key, sizeBytes, parts, totalParts } = payload;
+  const { videoId, uploadId, r2Key, sizeBytes, parts, totalParts, thumbnailKey } =
+    payload;
   if (!videoId || !uploadId || !r2Key || !sizeBytes) {
     return errorJson(400, "Missing completion fields.");
   }
@@ -75,9 +77,9 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
 
   const now = new Date().toISOString();
   await env.DB.prepare(
-    "UPDATE videos SET status = ?, size_bytes = ?, updated_at = ? WHERE id = ?"
+    "UPDATE videos SET status = ?, size_bytes = ?, thumbnail_key = COALESCE(?, thumbnail_key), updated_at = ? WHERE id = ?"
   )
-    .bind("ready", sizeBytes, now, videoId)
+    .bind("ready", sizeBytes, thumbnailKey || null, now, videoId)
     .run();
 
   return json({ ok: true });

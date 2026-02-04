@@ -91,6 +91,21 @@ export async function presignPartUpload(
   });
 }
 
+export async function presignObjectUpload(env: Env, key: string) {
+  const accessKeyId = env.R2_S3_ACCESS_KEY_ID.trim();
+  const secretAccessKey = env.R2_S3_SECRET_ACCESS_KEY.trim();
+  const url = buildObjectUrl(env, key);
+  return presignUrl({
+    method: "PUT",
+    url,
+    query: {},
+    accessKeyId,
+    secretAccessKey,
+    region: REGION,
+    expires: PRESIGN_EXPIRES
+  });
+}
+
 export async function completeMultipartUpload(
   env: Env,
   key: string,

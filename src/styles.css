@@ -136,3 +136,19 @@ input[type="range"] {
     opacity: 0.8;
   }
 }
+
+.video-shell:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  max-width: none;
+  border-radius: 0;
+  background: #000;
+}
+
+.video-shell:fullscreen > div {
+  height: 100%;
+}
+
+.video-shell:fullscreen video {
+  max-height: 100vh;
+}
