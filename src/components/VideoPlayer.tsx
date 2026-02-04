@@ -137,11 +137,15 @@ export default function VideoPlayer({
   const [isBuffering, setIsBuffering] = useState(true);
   const [pendingPlay, setPendingPlay] = useState(false);
   const isMobile = useMediaQuery("(max-width: 768px)");
-  const targetBufferAhead = isMobile
+  const initialBufferAhead = isMobile
     ? duration
       ? Math.min(duration * 0.5, 120)
       : 30
     : 6;
+  const resumeBufferAhead = isMobile
+    ? Math.min(12, initialBufferAhead)
+    : 4;
+  const pendingTarget = useRef(0);
 
   useEffect(() => {
     const element = videoRef.current;
@@ -182,8 +186,9 @@ export default function VideoPlayer({
     if (!element) return;
     if (element.paused) {
       const bufferAhead = Math.max(0, buffered - element.currentTime);
-      if (isMobile && bufferAhead < targetBufferAhead) {
+      if (isMobile && bufferAhead < initialBufferAhead) {
         setPendingPlay(true);
+        pendingTarget.current = initialBufferAhead;
         setIsBuffering(true);
         if (!bufferWaitStart.current) {
           bufferWaitStart.current = performance.now();
@@ -199,7 +204,7 @@ export default function VideoPlayer({
       bufferWaitStart.current = null;
     }
     revealControls();
-  }, [buffered, isMobile, revealControls, targetBufferAhead]);
+  }, [buffered, initialBufferAhead, isMobile, revealControls]);
 
   useEffect(() => {
     const element = videoRef.current;
@@ -266,11 +271,12 @@ export default function VideoPlayer({
     const waited = bufferWaitStart.current
       ? performance.now() - bufferWaitStart.current
       : 0;
-    const fallbackTarget =
-      targetBufferAhead || (isMobile ? 30 : 6);
-    if (bufferAhead >= fallbackTarget || waited > 6000) {
+    const target =
+      pendingTarget.current || (isMobile ? 30 : 6);
+    if (bufferAhead >= target || waited > 6000) {
       setPendingPlay(false);
       bufferWaitStart.current = null;
+      pendingTarget.current = 0;
       videoRef.current?.play().catch(() => undefined);
     }
   }, [
@@ -278,8 +284,20 @@ export default function VideoPlayer({
     currentTime,
     duration,
     pendingPlay,
-    targetBufferAhead
+    isMobile
   ]);
+
+  useEffect(() => {
+    if (!isMobile || !isPlaying) return;
+    const bufferAhead = Math.max(0, buffered - currentTime);
+    if (bufferAhead < Math.max(3, resumeBufferAhead / 2) && !pendingPlay) {
+      pendingTarget.current = resumeBufferAhead;
+      setPendingPlay(true);
+      setIsBuffering(true);
+      bufferWaitStart.current = performance.now();
+      videoRef.current?.pause();
+    }
+  }, [buffered, currentTime, isMobile, isPlaying, pendingPlay, resumeBufferAhead]);
 
 
   useEffect(() => {
@@ -382,10 +400,10 @@ export default function VideoPlayer({
     <div
       ref={containerRef}
       className={`glass-panel video-shell w-full mx-auto overflow-hidden ${
-        theaterMode ? "max-w-none" : "max-w-5xl"
+        theaterMode ? "max-w-[1400px]" : "max-w-[1200px]"
       }`}
     >
-      <div className="relative bg-black/80 aspect-video max-h-[75vh]">
+      <div className="relative bg-black/80 aspect-video max-h-[80vh]">
         <video
           ref={videoRef}
           src={src}

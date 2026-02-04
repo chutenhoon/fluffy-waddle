@@ -68,7 +68,7 @@ export default function Watch() {
     <div className="min-h-screen px-5 py-6 md:px-10">
       <div
         className={`mx-auto space-y-6 ${
-          theaterMode ? "max-w-none" : "max-w-6xl"
+          theaterMode ? "max-w-[1600px]" : "max-w-[1320px]"
         }`}
       >
         <div className="flex flex-col gap-2">
@@ -80,8 +80,8 @@ export default function Watch() {
           </h1>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
-          <div className="space-y-6">
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
+          <div className={`space-y-6 ${theaterMode ? "lg:flex lg:justify-center" : ""}`}>
             <VideoPlayer
               src={`/api/videos/${data.slug}/stream`}
               theaterMode={theaterMode}

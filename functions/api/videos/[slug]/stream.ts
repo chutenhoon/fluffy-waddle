@@ -25,7 +25,7 @@ export const onRequest: PagesFunction<Env> = async ({ env, request, params }) =>
   const headers = new Headers();
 
   headers.set("Accept-Ranges", "bytes");
-  headers.set("Cache-Control", "private, max-age=3600");
+  headers.set("Cache-Control", "private, max-age=86400");
   headers.set("Vary", "Range");
 
   if (rangeHeader && size > 0) {
