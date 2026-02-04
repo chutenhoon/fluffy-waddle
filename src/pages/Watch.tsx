@@ -56,10 +56,7 @@ export default function Watch() {
           </h1>
         </div>
 
-        <VideoPlayer
-          src={`/api/videos/${data.slug}/stream`}
-          title={data.title}
-        />
+        <VideoPlayer src={`/api/videos/${data.slug}/stream`} />
 
         {recommendations.length > 0 ? (
           <section className="space-y-4">
