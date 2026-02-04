@@ -27,6 +27,15 @@ function sanitizeFileName(value: string) {
     .slice(0, 120);
 }
 
+function inferContentType(fileName: string) {
+  const lower = fileName.toLowerCase();
+  if (lower.endsWith(".mp4")) return "video/mp4";
+  if (lower.endsWith(".mov")) return "video/quicktime";
+  if (lower.endsWith(".webm")) return "video/webm";
+  if (lower.endsWith(".ogg") || lower.endsWith(".ogv")) return "video/ogg";
+  return "";
+}
+
 function choosePartSize(sizeBytes: number) {
   const min = 5 * 1024 * 1024;
   const base = 10 * 1024 * 1024;
@@ -73,11 +82,12 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
   }
 
   const { title, fileName, sizeBytes, contentType } = payload;
-  if (!title || !fileName || !sizeBytes || !contentType) {
+  const resolvedContentType = contentType || inferContentType(fileName || "");
+  if (!title || !fileName || !sizeBytes) {
     return errorJson(400, "Missing upload fields.");
   }
 
-  if (!ALLOWED_TYPES.has(contentType)) {
+  if (!resolvedContentType || !ALLOWED_TYPES.has(resolvedContentType)) {
     return errorJson(400, "Unsupported video format.");
   }
 
@@ -93,7 +103,7 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
   let parts: Array<{ partNumber: number; url: string }>;
 
   try {
-    uploadId = await createMultipartUpload(env, r2Key, contentType);
+    uploadId = await createMultipartUpload(env, r2Key, resolvedContentType);
 
     parts = await Promise.all(
       Array.from({ length: totalParts }, async (_, index) => {

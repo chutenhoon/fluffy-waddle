@@ -112,7 +112,7 @@ export default function Admin() {
   };
 
   const uploadPart = (part: UploadPart, blob: Blob) => {
-    return new Promise<string>((resolve, reject) => {
+    return new Promise<string | null>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open("PUT", part.url);
 
@@ -125,36 +125,39 @@ export default function Admin() {
 
       xhr.onload = () => {
         if (xhr.status >= 200 && xhr.status < 300) {
-          const etag = xhr
-            .getResponseHeader("ETag")
-            ?.replace(/\"/g, "")
-            .trim();
-          if (!etag) {
-            reject(new Error("Missing ETag"));
-            return;
-          }
-          resolve(etag);
+          const etag = (xhr.getResponseHeader("ETag") ||
+            xhr.getResponseHeader("etag"))?.replace(/\"/g, "");
+          resolve(etag?.trim() || null);
         } else {
           reject(new Error(`Upload failed (${xhr.status})`));
         }
       };
 
-      xhr.onerror = () => reject(new Error("Upload failed"));
+      xhr.onerror = () =>
+        reject(
+          new Error(
+            "Upload failed (network or CORS). Ensure the R2 bucket allows PUT from this origin."
+          )
+        );
 
       xhr.send(blob);
     });
   };
 
   const runUploadQueue = async (queueParts: UploadPart[]) => {
-    if (!file || !session) return;
+    if (!file || !session) return { failed: 0, errors: [] as string[] };
     setStatus("uploading");
 
     const queue = queueParts.filter((part) => part.status !== "done");
+    if (queue.length === 0) {
+      return { failed: 0, errors: [] as string[] };
+    }
     let index = 0;
     let active = 0;
     let completed = 0;
+    const errors: string[] = [];
 
-    return new Promise<void>((resolve) => {
+    return new Promise<{ failed: number; errors: string[] }>((resolve) => {
       const launchNext = () => {
         while (active < MAX_CONCURRENCY && index < queue.length) {
           const part = queue[index++];
@@ -170,17 +173,20 @@ export default function Admin() {
               updatePart(part.partNumber, {
                 status: "done",
                 progress: 1,
-                etag
+                etag: etag || undefined
               });
             })
-            .catch(() => {
+            .catch((err) => {
+              errors.push(
+                err instanceof Error ? err.message : "Upload failed."
+              );
               updatePart(part.partNumber, { status: "error" });
             })
             .finally(() => {
               active -= 1;
               completed += 1;
               if (completed === queue.length) {
-                resolve();
+                resolve({ failed: errors.length, errors });
               } else {
                 launchNext();
               }
@@ -214,10 +220,13 @@ export default function Admin() {
           uploadId: session.uploadId,
           r2Key: session.r2Key,
           sizeBytes: file.size,
-          parts: parts.map((part) => ({
-            partNumber: part.partNumber,
-            etag: part.etag
-          }))
+          totalParts: parts.length,
+          parts: parts
+            .filter((part) => part.etag)
+            .map((part) => ({
+              partNumber: part.partNumber,
+              etag: part.etag
+            }))
         })
       });
 
@@ -232,8 +241,15 @@ export default function Admin() {
 
   const handleUpload = async () => {
     setError(null);
-    await runUploadQueue(parts);
+    const result = await runUploadQueue(parts);
     setStatus("idle");
+    if (result.failed > 0) {
+      setError(
+        `Failed ${result.failed} part(s). ${
+          result.errors[0] ? result.errors[0] : ""
+        }`.trim()
+      );
+    }
   };
 
   const handleRetryFailed = async () => {
@@ -242,8 +258,15 @@ export default function Admin() {
       part.status === "error" ? { ...part, status: "pending" } : part
     );
     setParts(nextParts);
-    await runUploadQueue(nextParts);
+    const result = await runUploadQueue(nextParts);
     setStatus("idle");
+    if (result.failed > 0) {
+      setError(
+        `Failed ${result.failed} part(s). ${
+          result.errors[0] ? result.errors[0] : ""
+        }`.trim()
+      );
+    }
   };
 
   const canStart = Boolean(file && title && adminKey);
@@ -300,14 +323,14 @@ export default function Admin() {
               disabled={!canStart || status === "creating"}
               className="px-4 py-2 rounded-xl bg-white/10 text-sm text-white/90 disabled:opacity-50"
             >
-              {status === "creating" ? "Preparing…" : "Prepare upload"}
+              {status === "creating" ? "Preparing..." : "Prepare upload"}
             </button>
             <button
               onClick={handleUpload}
               disabled={!session || status === "uploading"}
               className="px-4 py-2 rounded-xl bg-white/10 text-sm text-white/80 disabled:opacity-50"
             >
-              {status === "uploading" ? "Uploading…" : "Upload parts"}
+              {status === "uploading" ? "Uploading..." : "Upload parts"}
             </button>
             <button
               onClick={handleRetryFailed}
@@ -321,7 +344,7 @@ export default function Admin() {
               disabled={!session || status === "completing"}
               className="px-4 py-2 rounded-xl bg-white/10 text-sm text-white/80 disabled:opacity-50"
             >
-              {status === "completing" ? "Finalizing…" : "Complete upload"}
+              {status === "completing" ? "Finalizing..." : "Complete upload"}
             </button>
           </div>
 
@@ -362,7 +385,7 @@ export default function Admin() {
                 >
                   <span>Part {part.partNumber}</span>
                   <span>
-                    {part.status} · {Math.round(part.progress * 100)}%
+                    {part.status} - {Math.round(part.progress * 100)}%
                   </span>
                 </div>
               ))}
