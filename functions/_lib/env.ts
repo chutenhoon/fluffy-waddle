@@ -3,6 +3,7 @@ export interface Env {
   R2_VIDEOS: R2Bucket;
   VMS_KEY: string;
   ADMIN_KEY: string;
+  ADMIN_PANEL_KEY: string;
   SESSION_SECRET: string;
   APP_NAME: string;
   R2_S3_ACCESS_KEY_ID: string;

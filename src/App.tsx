@@ -28,9 +28,7 @@ export default function App() {
       <Route
         path="/admin"
         element={
-          <RequireAuth>
-            <Admin />
-          </RequireAuth>
+          <Admin />
         }
       />
       <Route

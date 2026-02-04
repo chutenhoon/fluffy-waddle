@@ -1,6 +1,7 @@
 import type { Env } from "../../../_lib/env";
 import { errorJson, json } from "../../../_lib/response";
 import { uniqueSlug } from "../../../_lib/slug";
+import { requireAdmin } from "../../../_lib/adminAuth";
 import {
   createMultipartUpload,
   presignPartUpload,
@@ -20,10 +21,6 @@ const ALLOWED_THUMB_TYPES = new Set([
   "image/webp"
 ]);
 
-function requireAdmin(request: Request, env: Env) {
-  const key = request.headers.get("x-admin-key");
-  return key && key === env.ADMIN_KEY;
-}
 
 function sanitizeFileName(value: string) {
   return value
@@ -66,9 +63,8 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
     return new Response(null, { status: 405 });
   }
 
-  if (!requireAdmin(request, env)) {
-    return errorJson(403, "Forbidden.");
-  }
+  const guard = requireAdmin(request, env);
+  if (guard) return guard;
 
   const missing = [
     "R2_S3_ACCESS_KEY_ID",

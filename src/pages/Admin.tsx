@@ -1,610 +1,423 @@
-import { useMemo, useState, useCallback } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { FormEvent, useEffect, useState } from "react";
 import { apiFetch, apiFetchVoid, ApiError } from "../api/client";
-import type { VideoItem } from "../components/VideoCard";
+import Loading from "../components/Loading";
 
-type CreateUploadResponse = {
-  videoId: string;
+type AdminVideo = {
+  id: string;
   slug: string;
-  r2Key: string;
-  uploadId: string;
-  partSize: number;
-  parts: Array<{ partNumber: number; url: string }>;
-  thumbnailKey?: string | null;
-  thumbnailUploadUrl?: string | null;
+  title: string;
+  thumb_key?: string | null;
+  created_at: string;
+  updated_at: string;
+  status: string;
 };
 
-type UploadPart = {
-  partNumber: number;
-  url: string;
-  status: "pending" | "uploading" | "done" | "error";
-  progress: number;
-  etag?: string;
+type AdminVideoDetail = AdminVideo & {
+  description?: string | null;
+  pc_key?: string | null;
+  hls_master_key?: string | null;
+  thumb_key?: string | null;
 };
 
-type UploadSession = CreateUploadResponse;
-
-type UploadState =
-  | "idle"
-  | "creating"
-  | "uploading"
-  | "completing"
-  | "done";
-
-const MAX_CONCURRENCY = 3;
-const THUMB_SIZE = 640;
+type AuthState = "checking" | "guest" | "authed";
 
 export default function Admin() {
-  const [adminKey, setAdminKey] = useState(
-    () => sessionStorage.getItem("vms_admin_key") || ""
-  );
-  const [title, setTitle] = useState("");
-  const [file, setFile] = useState<File | null>(null);
-  const [session, setSession] = useState<UploadSession | null>(null);
-  const [parts, setParts] = useState<UploadPart[]>([]);
-  const [status, setStatus] = useState<UploadState>("idle");
+  const [authState, setAuthState] = useState<AuthState>("checking");
+  const [key, setKey] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [thumbnailBlob, setThumbnailBlob] = useState<Blob | null>(null);
-  const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
-  const [thumbnailStatus, setThumbnailStatus] = useState<
-    "idle" | "generating" | "ready" | "uploading" | "error"
-  >("idle");
-  const [thumbnailUploaded, setThumbnailUploaded] = useState(false);
-  const [deletingSlug, setDeletingSlug] = useState<string | null>(null);
+  const [videos, setVideos] = useState<AdminVideo[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const queryClient = useQueryClient();
-  const { data: videos, isLoading: videosLoading } = useQuery({
-    queryKey: ["videos"],
-    queryFn: () => apiFetch<VideoItem[]>("/api/videos")
-  });
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [mp4File, setMp4File] = useState<File | null>(null);
+  const [thumbFile, setThumbFile] = useState<File | null>(null);
+  const [hlsFile, setHlsFile] = useState<File | null>(null);
+  const [creating, setCreating] = useState(false);
 
-  const clearThumbnailPreview = () => {
-    if (thumbnailPreview) {
-      URL.revokeObjectURL(thumbnailPreview);
-      setThumbnailPreview(null);
-    }
-  };
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingSlug, setEditingSlug] = useState<string | null>(null);
+  const [editingThumbKey, setEditingThumbKey] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editMp4, setEditMp4] = useState<File | null>(null);
+  const [editThumb, setEditThumb] = useState<File | null>(null);
+  const [editHls, setEditHls] = useState<File | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  const partSizeFor = useCallback(
-    (part: UploadPart) => {
-      if (!session || !file) return 0;
-      const start = (part.partNumber - 1) * session.partSize;
-      const end = Math.min(start + session.partSize, file.size);
-      return Math.max(0, end - start);
-    },
-    [file, session]
-  );
-
-  const totalProgress = useMemo(() => {
-    if (!file || parts.length === 0) return 0;
-    const uploaded = parts.reduce(
-      (sum, part) => sum + part.progress * partSizeFor(part),
-      0
-    );
-    return Math.min(100, (uploaded / file.size) * 100);
-  }, [file, parts, partSizeFor]);
-
-  const updatePart = (partNumber: number, updates: Partial<UploadPart>) => {
-    setParts((prev) =>
-      prev.map((part) =>
-        part.partNumber === partNumber ? { ...part, ...updates } : part
-      )
-    );
-  };
-
-  const handleAdminKeyChange = (value: string) => {
-    setAdminKey(value);
-    sessionStorage.setItem("vms_admin_key", value);
-  };
-
-  const generateThumbnail = async (videoFile: File) => {
-    setThumbnailStatus("generating");
-    clearThumbnailPreview();
-    setThumbnailUploaded(false);
-
-    const url = URL.createObjectURL(videoFile);
-    const video = document.createElement("video");
-    video.preload = "metadata";
-    video.muted = true;
-    video.playsInline = true;
-    video.src = url;
-
-    const cleanup = () => {
-      URL.revokeObjectURL(url);
-    };
-
-    const capture = () => {
-      const ratio =
-        video.videoWidth > 0 && video.videoHeight > 0
-          ? video.videoHeight / video.videoWidth
-          : 9 / 16;
-      const width = THUMB_SIZE;
-      const height = Math.round(width * ratio);
-      const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
-        cleanup();
-        setThumbnailStatus("error");
-        return;
-      }
-      ctx.drawImage(video, 0, 0, width, height);
-      canvas.toBlob(
-        (blob) => {
-          cleanup();
-          if (!blob) {
-            setThumbnailStatus("error");
-            return;
-          }
-          setThumbnailBlob(blob);
-          setThumbnailPreview(URL.createObjectURL(blob));
-          setThumbnailStatus("ready");
-        },
-        "image/jpeg",
-        0.8
-      );
-    };
-
-    const onLoaded = () => {
-      const target = Number.isFinite(video.duration)
-        ? Math.min(1, Math.max(0.1, video.duration * 0.1))
-        : 0;
-      try {
-        video.currentTime = target;
-      } catch {
-        capture();
-      }
-    };
-
-    const onSeeked = () => capture();
-    const onError = () => {
-      cleanup();
-      setThumbnailStatus("error");
-    };
-
-    video.addEventListener("loadedmetadata", onLoaded, { once: true });
-    video.addEventListener("seeked", onSeeked, { once: true });
-    video.addEventListener("error", onError, { once: true });
-  };
-
-  const handleThumbnailFile = (fileValue: File | null) => {
-    if (!fileValue) {
-      setThumbnailBlob(null);
-      setThumbnailStatus("idle");
-      clearThumbnailPreview();
-      return;
-    }
-    setThumbnailBlob(fileValue);
-    clearThumbnailPreview();
-    setThumbnailPreview(URL.createObjectURL(fileValue));
-    setThumbnailStatus("ready");
-    setThumbnailUploaded(false);
-  };
-
-  const handleCreate = async () => {
-    if (!file || !title || !adminKey) return;
+  const loadVideos = async () => {
+    setLoading(true);
     setError(null);
-    setStatus("creating");
-
     try {
-      setThumbnailUploaded(false);
-      const response = await apiFetch<CreateUploadResponse>(
-        "/api/admin/uploads/create",
-        {
-          method: "POST",
-          headers: {
-            "x-admin-key": adminKey
-          },
-          body: JSON.stringify({
-            title,
-            fileName: file.name,
-            sizeBytes: file.size,
-            contentType: file.type,
-            thumbnailContentType: thumbnailBlob?.type || undefined
-          })
-        }
-      );
-
-      setSession(response);
-      setParts(
-        response.parts.map((part) => ({
-          ...part,
-          status: "pending",
-          progress: 0
-        }))
-      );
-
-      if (thumbnailBlob && response.thumbnailUploadUrl && response.thumbnailKey) {
-        setThumbnailStatus("uploading");
-        const uploadResponse = await fetch(response.thumbnailUploadUrl, {
-          method: "PUT",
-          headers: {
-            "Content-Type": thumbnailBlob.type || "image/jpeg"
-          },
-          body: thumbnailBlob
-        });
-        if (!uploadResponse.ok) {
-          throw new Error("Thumbnail upload failed.");
-        }
-        setThumbnailUploaded(true);
-        setThumbnailStatus("ready");
+      const data = await apiFetch<AdminVideo[]>("/api/admin/videos");
+      setVideos(data || []);
+      setAuthState("authed");
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        setAuthState("guest");
+      } else {
+        setError(err instanceof Error ? err.message : "Failed to load.");
+        setAuthState("guest");
       }
-
-      setStatus("idle");
-    } catch (err) {
-      const message =
-        err instanceof ApiError ? err.message : "Unable to start upload.";
-      setError(message);
-      setStatus("idle");
-      setThumbnailStatus("error");
-    }
-  };
-
-  const uploadPart = (part: UploadPart, blob: Blob) => {
-    return new Promise<string | null>((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open("PUT", part.url);
-
-      xhr.upload.onprogress = (event) => {
-        if (!event.lengthComputable) return;
-        updatePart(part.partNumber, {
-          progress: event.total > 0 ? event.loaded / event.total : 0
-        });
-      };
-
-      xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          const etag = (xhr.getResponseHeader("ETag") ||
-            xhr.getResponseHeader("etag"))?.replace(/\"/g, "");
-          resolve(etag?.trim() || null);
-        } else {
-          reject(new Error(`Upload failed (${xhr.status})`));
-        }
-      };
-
-      xhr.onerror = () =>
-        reject(
-          new Error(
-            "Upload failed (network or CORS). Ensure the R2 bucket allows PUT from this origin."
-          )
-        );
-
-      xhr.send(blob);
-    });
-  };
-
-  const runUploadQueue = async (queueParts: UploadPart[]) => {
-    if (!file || !session) return { failed: 0, errors: [] as string[] };
-    setStatus("uploading");
-
-    const queue = queueParts.filter((part) => part.status !== "done");
-    if (queue.length === 0) {
-      return { failed: 0, errors: [] as string[] };
-    }
-    let index = 0;
-    let active = 0;
-    let completed = 0;
-    const errors: string[] = [];
-
-    return new Promise<{ failed: number; errors: string[] }>((resolve) => {
-      const launchNext = () => {
-        while (active < MAX_CONCURRENCY && index < queue.length) {
-          const part = queue[index++];
-          const start = (part.partNumber - 1) * session.partSize;
-          const end = Math.min(start + session.partSize, file.size);
-          const blob = file.slice(start, end);
-
-          active += 1;
-          updatePart(part.partNumber, { status: "uploading", progress: 0 });
-
-          uploadPart(part, blob)
-            .then((etag) => {
-              updatePart(part.partNumber, {
-                status: "done",
-                progress: 1,
-                etag: etag || undefined
-              });
-            })
-            .catch((err) => {
-              errors.push(
-                err instanceof Error ? err.message : "Upload failed."
-              );
-              updatePart(part.partNumber, { status: "error" });
-            })
-            .finally(() => {
-              active -= 1;
-              completed += 1;
-              if (completed === queue.length) {
-                resolve({ failed: errors.length, errors });
-              } else {
-                launchNext();
-              }
-            });
-        }
-      };
-
-      launchNext();
-    });
-  };
-
-  const handleComplete = async () => {
-    if (!session || !file || !adminKey) return;
-    const pending = parts.filter((part) => part.status !== "done");
-    if (pending.length > 0) {
-      setError("Some parts still need upload.");
-      return;
-    }
-
-    setStatus("completing");
-    setError(null);
-
-    try {
-      await apiFetchVoid("/api/admin/uploads/complete", {
-        method: "POST",
-        headers: {
-          "x-admin-key": adminKey
-        },
-        body: JSON.stringify({
-          videoId: session.videoId,
-          uploadId: session.uploadId,
-          r2Key: session.r2Key,
-          sizeBytes: file.size,
-          thumbnailKey: thumbnailUploaded ? session.thumbnailKey : null,
-          totalParts: parts.length,
-          parts: parts
-            .filter((part) => part.etag)
-            .map((part) => ({
-              partNumber: part.partNumber,
-              etag: part.etag
-            }))
-        })
-      });
-
-      setStatus("done");
-    } catch (err) {
-      const message =
-        err instanceof ApiError ? err.message : "Unable to finalize upload.";
-      setError(message);
-      setStatus("idle");
-    }
-  };
-
-  const handleUpload = async () => {
-    setError(null);
-    const result = await runUploadQueue(parts);
-    setStatus("idle");
-    if (result.failed > 0) {
-      setError(
-        `Failed ${result.failed} part(s). ${
-          result.errors[0] ? result.errors[0] : ""
-        }`.trim()
-      );
-    }
-  };
-
-  const handleRetryFailed = async () => {
-    setError(null);
-    const nextParts = parts.map((part) =>
-      part.status === "error" ? { ...part, status: "pending" } : part
-    );
-    setParts(nextParts);
-    const result = await runUploadQueue(nextParts);
-    setStatus("idle");
-    if (result.failed > 0) {
-      setError(
-        `Failed ${result.failed} part(s). ${
-          result.errors[0] ? result.errors[0] : ""
-        }`.trim()
-      );
-    }
-  };
-
-  const canStart = Boolean(
-    file && title && adminKey && thumbnailStatus !== "generating"
-  );
-
-  const handleDeleteVideo = async (slug: string) => {
-    if (!adminKey) {
-      setError("Missing admin key.");
-      return;
-    }
-    const ok = window.confirm("Delete this video? This cannot be undone.");
-    if (!ok) return;
-    setDeletingSlug(slug);
-    setError(null);
-
-    try {
-      await apiFetchVoid("/api/admin/videos/delete", {
-        method: "POST",
-        headers: {
-          "x-admin-key": adminKey
-        },
-        body: JSON.stringify({ slug })
-      });
-      await queryClient.invalidateQueries({ queryKey: ["videos"] });
-    } catch (err) {
-      const message =
-        err instanceof ApiError ? err.message : "Unable to delete video.";
-      setError(message);
     } finally {
-      setDeletingSlug(null);
+      setLoading(false);
     }
   };
+
+  useEffect(() => {
+    loadVideos();
+  }, []);
+
+  const handleLogin = async (event: FormEvent) => {
+    event.preventDefault();
+    setError(null);
+    try {
+      await apiFetchVoid("/api/admin/login", {
+        method: "POST",
+        body: JSON.stringify({ key })
+      });
+      setAuthState("authed");
+      await loadVideos();
+    } catch (err) {
+      const message =
+        err instanceof ApiError ? err.message : "Login failed.";
+      setError(message);
+    }
+  };
+
+  const handleLogout = async () => {
+    await apiFetchVoid("/api/admin/logout", { method: "POST" });
+    setAuthState("guest");
+    setVideos([]);
+  };
+
+  const handleCreate = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!title || !mp4File || !hlsFile) {
+      setError("Title, MP4, and HLS ZIP are required.");
+      return;
+    }
+
+    setCreating(true);
+    setError(null);
+
+    try {
+      const form = new FormData();
+      form.append("title", title);
+      if (description) form.append("description", description);
+      form.append("mp4", mp4File);
+      if (thumbFile) form.append("thumb", thumbFile);
+      form.append("hls_zip", hlsFile);
+
+      const response = await fetch("/api/admin/videos", {
+        method: "POST",
+        body: form,
+        credentials: "include"
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data?.error || "Upload failed.");
+      }
+
+      setTitle("");
+      setDescription("");
+      setMp4File(null);
+      setThumbFile(null);
+      setHlsFile(null);
+      await loadVideos();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed.");
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleEdit = async (id: string) => {
+    setError(null);
+    setEditingId(id);
+    setSaving(true);
+    try {
+      const data = await apiFetch<AdminVideoDetail>(`/api/admin/videos/${id}`);
+      setEditTitle(data.title);
+      setEditDescription(data.description || "");
+      setEditingSlug(data.slug);
+      setEditingThumbKey(data.thumb_key || null);
+      setEditMp4(null);
+      setEditThumb(null);
+      setEditHls(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load.");
+      setEditingId(null);
+      setEditingSlug(null);
+      setEditingThumbKey(null);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSave = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!editingId) return;
+
+    setSaving(true);
+    setError(null);
+    try {
+      const form = new FormData();
+      form.append("title", editTitle);
+      form.append("description", editDescription);
+      if (editMp4) form.append("mp4", editMp4);
+      if (editThumb) form.append("thumb", editThumb);
+      if (editHls) form.append("hls_zip", editHls);
+
+      const response = await fetch(`/api/admin/videos/${editingId}`, {
+        method: "PUT",
+        body: form,
+        credentials: "include"
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data?.error || "Update failed.");
+      }
+
+      setEditingId(null);
+      setEditingSlug(null);
+      setEditingThumbKey(null);
+      await loadVideos();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Update failed.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (authState === "checking") {
+    return (
+      <Loading
+        title="Doi xi nha"
+        subtitle="Dang kiem tra quyen admin."
+      />
+    );
+  }
+
+  if (authState === "guest") {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-6">
+        <div className="glass-panel w-full max-w-sm p-8 space-y-6">
+          <div className="space-y-2">
+            <h1 className="text-2xl font-medium text-white">Admin Access</h1>
+            <p className="text-sm text-white/50">
+              Enter the admin panel key.
+            </p>
+          </div>
+          <form onSubmit={handleLogin} className="space-y-4">
+            <input
+              type="password"
+              value={key}
+              onChange={(event) => setKey(event.target.value)}
+              placeholder="Admin key"
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white/90 focus:outline-none focus:ring-1 focus:ring-white/20"
+              required
+            />
+            <button
+              type="submit"
+              className="w-full rounded-xl bg-white/10 text-white/90 py-3 text-sm font-medium hover:bg-white/20 transition"
+            >
+              Unlock admin
+            </button>
+          </form>
+          {error ? <p className="text-sm text-white/60">{error}</p> : null}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen px-5 py-8 md:px-10">
-      <div className="max-w-4xl mx-auto space-y-6">
+      <div className="max-w-5xl mx-auto space-y-6">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-medium text-white">Admin Vault</h1>
             <p className="text-sm text-white/50">
-              Upload memories with quiet precision.
+              Create and manage video assets.
             </p>
           </div>
+          <button
+            onClick={handleLogout}
+            className="text-sm text-white/60 hover:text-white/90 transition"
+          >
+            Logout
+          </button>
         </div>
 
-        <div className="glass-panel p-6 space-y-5">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <label className="text-xs text-white/40">Admin key</label>
-              <input
-                type="password"
-                value={adminKey}
-                onChange={(event) => handleAdminKeyChange(event.target.value)}
-                placeholder="ADMIN_KEY"
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white/90 focus:outline-none focus:ring-1 focus:ring-white/20"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-xs text-white/40">Title</label>
+        <div className="glass-panel p-6 space-y-4">
+          <div className="text-sm text-white/70">Create new video</div>
+          <form onSubmit={handleCreate} className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
               <input
                 type="text"
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
-                placeholder="Memory title"
+                placeholder="Title"
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white/90 focus:outline-none focus:ring-1 focus:ring-white/20"
+                required
+              />
+              <input
+                type="text"
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                placeholder="Description (optional)"
                 className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white/90 focus:outline-none focus:ring-1 focus:ring-white/20"
               />
             </div>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-xs text-white/40">Video file</label>
-            <input
-              type="file"
-              accept="video/*"
-              onChange={(event) => {
-                const nextFile = event.target.files?.[0] || null;
-                setFile(nextFile);
-                if (nextFile) {
-                  generateThumbnail(nextFile);
-                } else {
-                  setThumbnailBlob(null);
-                  setThumbnailStatus("idle");
-                  clearThumbnailPreview();
-                }
-              }}
-              className="w-full text-sm text-white/70"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-xs text-white/40">
-              Thumbnail (optional)
-            </label>
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(event) =>
-                handleThumbnailFile(event.target.files?.[0] || null)
-              }
-              className="w-full text-sm text-white/70"
-            />
-            <div className="flex items-center gap-3 text-xs text-white/50">
-              <span>Status: {thumbnailStatus}</span>
-              {thumbnailUploaded ? <span>Uploaded</span> : null}
+            <div className="grid gap-3 md:grid-cols-3">
+              <label className="text-xs text-white/50 space-y-1">
+                <span>PC MP4 (required)</span>
+                <input
+                  type="file"
+                  accept="video/*"
+                  onChange={(event) =>
+                    setMp4File(event.target.files?.[0] || null)
+                  }
+                  className="w-full text-sm text-white/70"
+                  required
+                />
+              </label>
+              <label className="text-xs text-white/50 space-y-1">
+                <span>Thumbnail (optional)</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(event) =>
+                    setThumbFile(event.target.files?.[0] || null)
+                  }
+                  className="w-full text-sm text-white/70"
+                />
+              </label>
+              <label className="text-xs text-white/50 space-y-1">
+                <span>HLS ZIP (required)</span>
+                <input
+                  type="file"
+                  accept=".zip"
+                  onChange={(event) =>
+                    setHlsFile(event.target.files?.[0] || null)
+                  }
+                  className="w-full text-sm text-white/70"
+                  required
+                />
+              </label>
             </div>
-            {thumbnailPreview ? (
-              <img
-                src={thumbnailPreview}
-                alt="Thumbnail preview"
-                className="h-24 w-40 rounded-lg object-cover border border-white/10"
-              />
-            ) : null}
-          </div>
-
-          <div className="flex flex-wrap gap-3">
             <button
-              onClick={handleCreate}
-              disabled={!canStart || status === "creating"}
+              type="submit"
+              disabled={creating}
               className="px-4 py-2 rounded-xl bg-white/10 text-sm text-white/90 disabled:opacity-50"
             >
-              {status === "creating" ? "Preparing..." : "Prepare upload"}
+              {creating ? "Uploading..." : "Create video"}
             </button>
-            <button
-              onClick={handleUpload}
-              disabled={!session || status === "uploading"}
-              className="px-4 py-2 rounded-xl bg-white/10 text-sm text-white/80 disabled:opacity-50"
-            >
-              {status === "uploading" ? "Uploading..." : "Upload parts"}
-            </button>
-            <button
-              onClick={handleRetryFailed}
-              disabled={!session || parts.every((part) => part.status !== "error")}
-              className="px-4 py-2 rounded-xl bg-white/10 text-sm text-white/70 disabled:opacity-50"
-            >
-              Retry failed
-            </button>
-            <button
-              onClick={handleComplete}
-              disabled={!session || status === "completing"}
-              className="px-4 py-2 rounded-xl bg-white/10 text-sm text-white/80 disabled:opacity-50"
-            >
-              {status === "completing" ? "Finalizing..." : "Complete upload"}
-            </button>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-xs text-white/50">
-              <span>Overall progress</span>
-              <span>{Math.round(totalProgress)}%</span>
-            </div>
-            <div className="h-2 rounded-full bg-white/10 overflow-hidden">
-              <div
-                className="h-full bg-white/40"
-                style={{ width: `${totalProgress}%` }}
-              />
-            </div>
-          </div>
-
-          {session ? (
-            <div className="space-y-2 text-xs text-white/50">
-              <div>Upload ID: {session.uploadId}</div>
-              <div>Parts: {parts.length}</div>
-            </div>
-          ) : null}
-
-          {error ? <div className="text-sm text-white/60">{error}</div> : null}
-          {status === "done" ? (
-            <div className="text-sm text-white/70">Upload complete.</div>
-          ) : null}
+          </form>
         </div>
 
-        {parts.length > 0 ? (
-          <div className="glass-panel p-6 space-y-3">
-            <div className="text-sm text-white/70">Part status</div>
-            <div className="grid gap-2">
-              {parts.map((part) => (
-                <div
-                  key={part.partNumber}
-                  className="flex items-center justify-between text-xs text-white/50"
-                >
-                  <span>Part {part.partNumber}</span>
-                  <span>
-                    {part.status} - {Math.round(part.progress * 100)}%
-                  </span>
-                </div>
-              ))}
+        {editingId ? (
+          <div className="glass-panel p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-white/70">Edit video</div>
+              <button
+                onClick={() => {
+                  setEditingId(null);
+                  setEditingSlug(null);
+                  setEditingThumbKey(null);
+                }}
+                className="text-xs text-white/50 hover:text-white/80"
+              >
+                Cancel
+              </button>
             </div>
+            <form onSubmit={handleSave} className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <input
+                  type="text"
+                  value={editTitle}
+                  onChange={(event) => setEditTitle(event.target.value)}
+                  placeholder="Title"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white/90 focus:outline-none focus:ring-1 focus:ring-white/20"
+                  required
+                />
+                <input
+                  type="text"
+                  value={editDescription}
+                  onChange={(event) => setEditDescription(event.target.value)}
+                  placeholder="Description"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white/90 focus:outline-none focus:ring-1 focus:ring-white/20"
+                />
+              </div>
+              <div className="grid gap-3 md:grid-cols-3">
+                <label className="text-xs text-white/50 space-y-1">
+                  <span>Replace MP4</span>
+                  <input
+                    type="file"
+                    accept="video/*"
+                    onChange={(event) =>
+                      setEditMp4(event.target.files?.[0] || null)
+                    }
+                    className="w-full text-sm text-white/70"
+                  />
+                </label>
+                <label className="text-xs text-white/50 space-y-1">
+                  <span>Replace thumbnail</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(event) =>
+                      setEditThumb(event.target.files?.[0] || null)
+                    }
+                    className="w-full text-sm text-white/70"
+                  />
+                </label>
+                <label className="text-xs text-white/50 space-y-1">
+                  <span>Replace HLS ZIP</span>
+                  <input
+                    type="file"
+                    accept=".zip"
+                    onChange={(event) =>
+                      setEditHls(event.target.files?.[0] || null)
+                    }
+                    className="w-full text-sm text-white/70"
+                  />
+                </label>
+              </div>
+              {editingSlug && editingThumbKey ? (
+                <img
+                  src={`/api/videos/${editingSlug}/thumb`}
+                  alt=""
+                  className="h-24 w-40 rounded-lg object-cover border border-white/10"
+                />
+              ) : null}
+              <button
+                type="submit"
+                disabled={saving}
+                className="px-4 py-2 rounded-xl bg-white/10 text-sm text-white/90 disabled:opacity-50"
+              >
+                {saving ? "Saving..." : "Save changes"}
+              </button>
+            </form>
           </div>
         ) : null}
 
         <div className="glass-panel p-6 space-y-4">
           <div className="flex items-center justify-between">
-            <div className="text-sm text-white/70">Manage videos</div>
-            {videosLoading ? (
+            <div className="text-sm text-white/70">Videos</div>
+            {loading ? (
               <div className="text-xs text-white/40">Loading...</div>
             ) : null}
           </div>
 
           <div className="grid gap-3">
-            {videos?.map((video) => (
+            {videos.map((video) => (
               <div
                 key={video.id}
                 className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2"
               >
                 <div className="flex items-center gap-3">
-                  {video.thumbnail_key ? (
+                  {video.thumb_key ? (
                     <img
                       src={`/api/videos/${video.slug}/thumb`}
                       alt=""
@@ -618,22 +431,21 @@ export default function Admin() {
                     <div className="text-xs text-white/40">{video.slug}</div>
                   </div>
                 </div>
-
                 <button
-                  onClick={() => handleDeleteVideo(video.slug)}
-                  disabled={deletingSlug === video.slug}
-                  className="px-3 py-1.5 rounded-lg bg-red-500/15 text-xs text-red-200 hover:bg-red-500/25 disabled:opacity-50"
+                  onClick={() => handleEdit(video.id)}
+                  className="px-3 py-1.5 rounded-lg bg-white/10 text-xs text-white/80 hover:bg-white/20"
                 >
-                  {deletingSlug === video.slug ? "Deleting..." : "Delete"}
+                  Edit
                 </button>
               </div>
             ))}
-
-            {videos?.length === 0 ? (
+            {videos.length === 0 && !loading ? (
               <div className="text-xs text-white/40">No videos yet.</div>
             ) : null}
           </div>
         </div>
+
+        {error ? <div className="text-sm text-white/60">{error}</div> : null}
       </div>
     </div>
   );
