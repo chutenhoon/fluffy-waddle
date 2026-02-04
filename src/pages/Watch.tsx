@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { apiFetch } from "../api/client";
 import VideoCard, { VideoItem } from "../components/VideoCard";
+import Loading from "../components/Loading";
 import VideoPlayer from "../components/VideoPlayer";
 
 type VideoDetail = {
@@ -31,7 +32,12 @@ export default function Watch() {
     allVideos?.filter((video) => video.slug !== slug).slice(0, 6) || [];
 
   if (isLoading) {
-    return <div className="min-h-screen text-white/50 p-6">Loading...</div>;
+    return (
+      <Loading
+        title="Doi xi nha"
+        subtitle="Dang tai video de phat muot hon."
+      />
+    );
   }
 
   if (!data) {

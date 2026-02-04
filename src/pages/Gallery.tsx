@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiFetchVoid, apiFetch } from "../api/client";
 import VideoCard, { VideoItem } from "../components/VideoCard";
+import Loading from "../components/Loading";
 import { useNavigate } from "react-router-dom";
 
 export default function Gallery() {
@@ -14,6 +15,15 @@ export default function Gallery() {
     await apiFetchVoid("/api/auth/logout", { method: "POST" });
     navigate("/login", { replace: true });
   };
+
+  if (isLoading) {
+    return (
+      <Loading
+        title="Doi xi nha"
+        subtitle="Dang gom lai cac ky uc de hien thi."
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen px-5 py-8 md:px-10">
@@ -33,18 +43,14 @@ export default function Gallery() {
           </button>
         </header>
 
-        {isLoading ? (
-          <div className="text-white/50 text-sm">Loading memories...</div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-            {data?.map((video) => (
-              <VideoCard key={video.id} video={video} />
-            ))}
-            {data?.length === 0 ? (
-              <div className="text-white/50 text-sm">No memories yet.</div>
-            ) : null}
-          </div>
-        )}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+          {data?.map((video) => (
+            <VideoCard key={video.id} video={video} />
+          ))}
+          {data?.length === 0 ? (
+            <div className="text-white/50 text-sm">No memories yet.</div>
+          ) : null}
+        </div>
       </div>
     </div>
   );
