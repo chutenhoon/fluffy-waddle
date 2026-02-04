@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiFetch } from "../api/client";
 import VideoCard, { VideoItem } from "../components/VideoCard";
@@ -16,6 +17,7 @@ type VideoDetail = {
 
 export default function Watch() {
   const { slug } = useParams();
+  const [theaterMode, setTheaterMode] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ["video", slug],
@@ -29,7 +31,12 @@ export default function Watch() {
   });
 
   const recommendations =
-    allVideos?.filter((video) => video.slug !== slug).slice(0, 6) || [];
+    allVideos?.filter((video) => video.slug !== slug) || [];
+
+  const sidebarVideos = useMemo(
+    () => recommendations.slice(0, 10),
+    [recommendations]
+  );
 
   if (isLoading) {
     return (
@@ -44,9 +51,26 @@ export default function Watch() {
     return <div className="min-h-screen text-white/50 p-6">Not found.</div>;
   }
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const saved = window.localStorage.getItem("vms_theater_mode");
+    if (saved) {
+      setTheaterMode(saved === "1");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem("vms_theater_mode", theaterMode ? "1" : "0");
+  }, [theaterMode]);
+
   return (
-    <div className="min-h-screen px-5 py-8 md:px-10">
-      <div className="max-w-6xl mx-auto space-y-8">
+    <div className="min-h-screen px-5 py-6 md:px-10">
+      <div
+        className={`mx-auto space-y-6 ${
+          theaterMode ? "max-w-none" : "max-w-6xl"
+        }`}
+      >
         <div className="flex flex-col gap-2">
           <Link to="/" className="text-sm text-white/60 hover:text-white/90">
             Back to vault
@@ -56,25 +80,36 @@ export default function Watch() {
           </h1>
         </div>
 
-        <VideoPlayer src={`/api/videos/${data.slug}/stream`} />
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
+          <div className="space-y-6">
+            <VideoPlayer
+              src={`/api/videos/${data.slug}/stream`}
+              theaterMode={theaterMode}
+              onToggleTheater={() => setTheaterMode((prev) => !prev)}
+            />
+          </div>
 
-        {recommendations.length > 0 ? (
-          <section className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm uppercase tracking-[0.2em] text-white/40">
-                More to watch
-              </h2>
-              <Link to="/" className="text-xs text-white/50 hover:text-white/80">
-                View all
-              </Link>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-              {recommendations.map((video) => (
-                <VideoCard key={video.id} video={video} />
-              ))}
-            </div>
-          </section>
-        ) : null}
+          {sidebarVideos.length > 0 ? (
+            <aside className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xs uppercase tracking-[0.3em] text-white/40">
+                  More to watch
+                </h2>
+                <Link
+                  to="/"
+                  className="text-xs text-white/50 hover:text-white/80"
+                >
+                  View all
+                </Link>
+              </div>
+              <div className="grid gap-4">
+                {sidebarVideos.map((video) => (
+                  <VideoCard key={video.id} video={video} />
+                ))}
+              </div>
+            </aside>
+          ) : null}
+        </div>
       </div>
     </div>
   );

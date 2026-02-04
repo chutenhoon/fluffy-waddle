@@ -85,6 +85,15 @@ function IconFullscreen() {
   );
 }
 
+function IconTheater() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current">
+      <rect x="3" y="6" width="18" height="12" rx="2" />
+      <rect x="6.5" y="8.5" width="11" height="7" rx="1.5" fill="black" />
+    </svg>
+  );
+}
+
 function ControlButton({
   onClick,
   children,
@@ -105,7 +114,15 @@ function ControlButton({
   );
 }
 
-export default function VideoPlayer({ src }: { src: string }) {
+export default function VideoPlayer({
+  src,
+  theaterMode = false,
+  onToggleTheater
+}: {
+  src: string;
+  theaterMode?: boolean;
+  onToggleTheater?: () => void;
+}) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const hideTimer = useRef<number | undefined>(undefined);
@@ -165,6 +182,7 @@ export default function VideoPlayer({ src }: { src: string }) {
           bufferWaitStart.current = performance.now();
         }
         element.play().catch(() => undefined);
+        revealControls();
         return;
       }
       element.play().catch(() => undefined);
@@ -197,7 +215,15 @@ export default function VideoPlayer({ src }: { src: string }) {
       try {
         const ranges = element.buffered;
         if (ranges.length > 0) {
-          setBuffered(ranges.end(ranges.length - 1));
+          const current = element.currentTime || 0;
+          let end = ranges.end(ranges.length - 1);
+          for (let i = 0; i < ranges.length; i += 1) {
+            if (current >= ranges.start(i) && current <= ranges.end(i)) {
+              end = ranges.end(i);
+              break;
+            }
+          }
+          setBuffered(end);
         }
       } catch {
         setBuffered(0);
@@ -346,13 +372,15 @@ export default function VideoPlayer({ src }: { src: string }) {
   return (
     <div
       ref={containerRef}
-      className="glass-panel video-shell w-full max-w-5xl mx-auto overflow-hidden"
+      className={`glass-panel video-shell w-full mx-auto overflow-hidden ${
+        theaterMode ? "max-w-none" : "max-w-5xl"
+      }`}
     >
-      <div className="relative bg-black/80">
+      <div className="relative bg-black/80 aspect-video max-h-[75vh]">
         <video
           ref={videoRef}
           src={src}
-          className="w-full aspect-video max-h-[75vh] object-contain"
+          className="w-full h-full object-contain"
           playsInline
           preload="auto"
           onClick={togglePlay}
@@ -426,6 +454,11 @@ export default function VideoPlayer({ src }: { src: string }) {
                 <ControlButton onClick={toggleMute} label="Mute">
                   <IconVolume muted={muted} />
                 </ControlButton>
+                {!isMobile && onToggleTheater ? (
+                  <ControlButton onClick={onToggleTheater} label="Theater mode">
+                    <IconTheater />
+                  </ControlButton>
+                ) : null}
                 <ControlButton onClick={toggleFullscreen} label="Fullscreen">
                   <IconFullscreen />
                 </ControlButton>
