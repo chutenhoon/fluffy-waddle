@@ -405,7 +405,7 @@ export default function VideoPlayer({
     >
       <div
         className={`relative bg-black/80 aspect-video mx-auto ${
-          theaterMode ? "w-full" : "max-h-[80vh]"
+          theaterMode ? "w-full max-h-[78vh]" : "max-h-[80vh]"
         }`}
       >
         <video
