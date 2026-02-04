@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
+import { unzip } from "fflate";
 import { apiFetch, apiFetchVoid, ApiError } from "../api/client";
 import Loading from "../components/Loading";
 
@@ -21,6 +22,188 @@ type AdminVideoDetail = AdminVideo & {
 
 type AuthState = "checking" | "guest" | "authed";
 
+type HlsEntry = {
+  path: string;
+  data: Uint8Array;
+  contentType: string;
+};
+
+type PresignResponse = {
+  uploadUrl: string;
+  objectKey: string;
+};
+
+const HLS_CONCURRENCY = 3;
+const HLS_MASTER_NAME = "index.m3u8";
+const EXT_CONTENT_TYPES: Record<string, string> = {
+  m3u8: "application/vnd.apple.mpegurl",
+  ts: "video/mp2t",
+  m4s: "video/iso.segment",
+  mp4: "video/mp4",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  webp: "image/webp"
+};
+
+function contentTypeForPath(path: string) {
+  const ext = path.split(".").pop()?.toLowerCase() || "";
+  return EXT_CONTENT_TYPES[ext] || "application/octet-stream";
+}
+
+function normalizeZipPath(value: string) {
+  let path = value.replace(/\\/g, "/");
+  while (path.startsWith("./")) {
+    path = path.slice(2);
+  }
+  path = path.replace(/^\/+/, "");
+  return path;
+}
+
+async function unzipFile(file: File) {
+  const buffer = new Uint8Array(await file.arrayBuffer());
+  return new Promise<Record<string, Uint8Array>>((resolve, reject) => {
+    unzip(buffer, (err, data) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      resolve(data as Record<string, Uint8Array>);
+    });
+  });
+}
+
+function extractHlsEntries(files: Record<string, Uint8Array>) {
+  const entries: Array<{ path: string; data: Uint8Array }> = [];
+  for (const [rawName, data] of Object.entries(files)) {
+    const name = normalizeZipPath(rawName);
+    if (!name || name.endsWith("/")) continue;
+    if (name.startsWith("__MACOSX/")) continue;
+    if (name.includes("\0") || name.includes("..")) {
+      throw new Error("Invalid HLS ZIP entry.");
+    }
+    entries.push({ path: name, data });
+  }
+
+  if (entries.length === 0) {
+    throw new Error("HLS ZIP is empty.");
+  }
+
+  const names = entries.map((entry) => entry.path);
+  const hasRootIndex = names.includes(HLS_MASTER_NAME);
+  let basePrefix = "";
+  if (!hasRootIndex) {
+    const topLevels = new Set(names.map((name) => name.split("/")[0]));
+    if (topLevels.size !== 1) {
+      throw new Error("HLS ZIP must contain index.m3u8 at root or in a single folder.");
+    }
+    const [folder] = Array.from(topLevels);
+    if (!names.includes(`${folder}/${HLS_MASTER_NAME}`)) {
+      throw new Error("HLS ZIP missing index.m3u8.");
+    }
+    basePrefix = `${folder}/`;
+  }
+
+  const normalized: HlsEntry[] = [];
+  for (const entry of entries) {
+    if (basePrefix && !entry.path.startsWith(basePrefix)) {
+      throw new Error("HLS ZIP contains unexpected files.");
+    }
+    const relative = basePrefix ? entry.path.slice(basePrefix.length) : entry.path;
+    if (!relative || relative.endsWith("/")) continue;
+    if (relative.startsWith("/") || relative.includes("..")) {
+      throw new Error("Invalid HLS ZIP entry.");
+    }
+    normalized.push({
+      path: relative,
+      data: entry.data,
+      contentType: contentTypeForPath(relative)
+    });
+  }
+
+  if (!normalized.some((entry) => entry.path === HLS_MASTER_NAME)) {
+    throw new Error("HLS ZIP missing index.m3u8.");
+  }
+
+  return normalized;
+}
+
+function thumbExtension(file: File) {
+  const type = file.type.toLowerCase();
+  if (type === "image/png") return "png";
+  if (type === "image/webp") return "webp";
+  if (type === "image/jpeg") return "jpg";
+  const ext = file.name.split(".").pop()?.toLowerCase() || "";
+  if (ext === "jpeg") return "jpg";
+  if (ext === "jpg" || ext === "png" || ext === "webp") return ext;
+  return "jpg";
+}
+
+function thumbContentType(file: File, ext: string) {
+  if (file.type) return file.type;
+  return EXT_CONTENT_TYPES[ext] || "image/jpeg";
+}
+
+async function requestPresign(
+  videoId: string,
+  path: string,
+  contentType: string
+) {
+  return apiFetch<PresignResponse>("/api/admin/uploads/presign", {
+    method: "POST",
+    body: JSON.stringify({ videoId, path, contentType })
+  });
+}
+
+async function uploadToR2(
+  videoId: string,
+  path: string,
+  body: Blob | Uint8Array | File,
+  contentType: string
+) {
+  const { uploadUrl, objectKey } = await requestPresign(
+    videoId,
+    path,
+    contentType
+  );
+  const response = await fetch(uploadUrl, {
+    method: "PUT",
+    headers: {
+      "Content-Type": contentType
+    },
+    body
+  });
+  if (!response.ok) {
+    throw new Error(`Upload failed for ${path}.`);
+  }
+  return objectKey;
+}
+
+async function runWithConcurrency<T>(
+  items: T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<void>,
+  onProgress?: (done: number, total: number) => void
+) {
+  let index = 0;
+  let done = 0;
+  const runners = Array.from(
+    { length: Math.min(limit, items.length) },
+    async () => {
+      while (true) {
+        const current = index++;
+        if (current >= items.length) return;
+        await worker(items[current], current);
+        done += 1;
+        if (onProgress) {
+          onProgress(done, items.length);
+        }
+      }
+    }
+  );
+  await Promise.all(runners);
+}
+
 export default function Admin() {
   const [authState, setAuthState] = useState<AuthState>("checking");
   const [key, setKey] = useState("");
@@ -34,6 +217,7 @@ export default function Admin() {
   const [thumbFile, setThumbFile] = useState<File | null>(null);
   const [hlsFile, setHlsFile] = useState<File | null>(null);
   const [creating, setCreating] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<string | null>(null);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingSlug, setEditingSlug] = useState<string | null>(null);
@@ -93,31 +277,76 @@ export default function Admin() {
 
   const handleCreate = async (event: FormEvent) => {
     event.preventDefault();
-    if (!title || !mp4File || !hlsFile) {
+    const cleanedTitle = title.trim();
+    if (!cleanedTitle || !mp4File || !hlsFile) {
       setError("Title, MP4, and HLS ZIP are required.");
       return;
     }
 
     setCreating(true);
     setError(null);
+    setUploadStatus(null);
 
     try {
-      const form = new FormData();
-      form.append("title", title);
-      if (description) form.append("description", description);
-      form.append("mp4", mp4File);
-      if (thumbFile) form.append("thumb", thumbFile);
-      form.append("hls_zip", hlsFile);
+      const videoId = crypto.randomUUID();
 
-      const response = await fetch("/api/admin/videos", {
-        method: "POST",
-        body: form,
-        credentials: "include"
-      });
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data?.error || "Upload failed.");
+      setUploadStatus("Uploading MP4...");
+      const pcContentType = mp4File.type || "video/mp4";
+      const pcKey = await uploadToR2(
+        videoId,
+        "pc.mp4",
+        mp4File,
+        pcContentType
+      );
+
+      let thumbKey: string | null = null;
+      if (thumbFile) {
+        const ext = thumbExtension(thumbFile);
+        const thumbType = thumbContentType(thumbFile, ext);
+        setUploadStatus("Uploading thumbnail...");
+        thumbKey = await uploadToR2(
+          videoId,
+          `thumb.${ext}`,
+          thumbFile,
+          thumbType
+        );
       }
+
+      setUploadStatus("Extracting HLS ZIP...");
+      const extracted = extractHlsEntries(await unzipFile(hlsFile));
+      setUploadStatus(`Uploading HLS 0/${extracted.length} files`);
+      await runWithConcurrency(
+        extracted,
+        HLS_CONCURRENCY,
+        async (entry) => {
+          const blob = new Blob([entry.data], { type: entry.contentType });
+          await uploadToR2(
+            videoId,
+            `hls/${entry.path}`,
+            blob,
+            entry.contentType
+          );
+        },
+        (done, total) => {
+          setUploadStatus(`Uploading HLS ${done}/${total} files`);
+        }
+      );
+
+      const payload = {
+        id: videoId,
+        title: cleanedTitle,
+        description: description.trim() || null,
+        pc_key: pcKey,
+        thumb_key: thumbKey || undefined,
+        hls_master_key: `videos/${videoId}/hls/index.m3u8`,
+        size_bytes: mp4File.size
+      };
+
+      setUploadStatus("Saving metadata...");
+      await apiFetchVoid("/api/admin/videos", {
+        method: "POST",
+        body: JSON.stringify(payload)
+      });
 
       setTitle("");
       setDescription("");
@@ -129,6 +358,7 @@ export default function Admin() {
       setError(err instanceof Error ? err.message : "Upload failed.");
     } finally {
       setCreating(false);
+      setUploadStatus(null);
     }
   };
 
@@ -161,23 +391,67 @@ export default function Admin() {
 
     setSaving(true);
     setError(null);
+    setUploadStatus(null);
     try {
-      const form = new FormData();
-      form.append("title", editTitle);
-      form.append("description", editDescription);
-      if (editMp4) form.append("mp4", editMp4);
-      if (editThumb) form.append("thumb", editThumb);
-      if (editHls) form.append("hls_zip", editHls);
+      const payload: Record<string, unknown> = {
+        title: editTitle.trim(),
+        description: editDescription.trim()
+      };
 
-      const response = await fetch(`/api/admin/videos/${editingId}`, {
-        method: "PUT",
-        body: form,
-        credentials: "include"
-      });
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data?.error || "Update failed.");
+      if (editMp4) {
+        setUploadStatus("Uploading MP4...");
+        const pcContentType = editMp4.type || "video/mp4";
+        const pcKey = await uploadToR2(
+          editingId,
+          "pc.mp4",
+          editMp4,
+          pcContentType
+        );
+        payload.pc_key = pcKey;
+        payload.size_bytes = editMp4.size;
       }
+
+      if (editThumb) {
+        const ext = thumbExtension(editThumb);
+        const thumbType = thumbContentType(editThumb, ext);
+        setUploadStatus("Uploading thumbnail...");
+        const thumbKey = await uploadToR2(
+          editingId,
+          `thumb.${ext}`,
+          editThumb,
+          thumbType
+        );
+        payload.thumb_key = thumbKey;
+      }
+
+      if (editHls) {
+        setUploadStatus("Extracting HLS ZIP...");
+        const extracted = extractHlsEntries(await unzipFile(editHls));
+        setUploadStatus(`Uploading HLS 0/${extracted.length} files`);
+        await runWithConcurrency(
+          extracted,
+          HLS_CONCURRENCY,
+          async (entry) => {
+            const blob = new Blob([entry.data], { type: entry.contentType });
+            await uploadToR2(
+              editingId,
+              `hls/${entry.path}`,
+              blob,
+              entry.contentType
+            );
+          },
+          (done, total) => {
+            setUploadStatus(`Uploading HLS ${done}/${total} files`);
+          }
+        );
+        payload.hls_master_key = `videos/${editingId}/hls/index.m3u8`;
+      }
+
+      setUploadStatus("Saving metadata...");
+      await apiFetchVoid(`/api/admin/videos/${editingId}`, {
+        method: "PUT",
+        body: JSON.stringify(payload)
+      });
 
       setEditingId(null);
       setEditingSlug(null);
@@ -187,6 +461,7 @@ export default function Admin() {
       setError(err instanceof Error ? err.message : "Update failed.");
     } finally {
       setSaving(false);
+      setUploadStatus(null);
     }
   };
 
@@ -313,6 +588,9 @@ export default function Admin() {
             >
               {creating ? "Uploading..." : "Create video"}
             </button>
+            {creating && uploadStatus ? (
+              <div className="text-xs text-white/50">{uploadStatus}</div>
+            ) : null}
           </form>
         </div>
 
@@ -398,6 +676,9 @@ export default function Admin() {
               >
                 {saving ? "Saving..." : "Save changes"}
               </button>
+              {saving && uploadStatus ? (
+                <div className="text-xs text-white/50">{uploadStatus}</div>
+              ) : null}
             </form>
           </div>
         ) : null}

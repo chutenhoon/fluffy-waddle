@@ -91,7 +91,11 @@ export async function presignPartUpload(
   });
 }
 
-export async function presignObjectUpload(env: Env, key: string) {
+export async function presignObjectUpload(
+  env: Env,
+  key: string,
+  contentType?: string
+) {
   const accessKeyId = env.R2_S3_ACCESS_KEY_ID.trim();
   const secretAccessKey = env.R2_S3_SECRET_ACCESS_KEY.trim();
   const url = buildObjectUrl(env, key);
@@ -99,6 +103,7 @@ export async function presignObjectUpload(env: Env, key: string) {
     method: "PUT",
     url,
     query: {},
+    headers: contentType ? { "content-type": contentType } : undefined,
     accessKeyId,
     secretAccessKey,
     region: REGION,

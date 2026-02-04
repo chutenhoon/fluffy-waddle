@@ -2,18 +2,20 @@ import type { Env } from "../../../_lib/env";
 import { errorJson, json } from "../../../_lib/response";
 import { requireAdmin } from "../../../_lib/adminAuth";
 import { ensureVideosSchema } from "../../../_lib/videoSchema";
-import { extractHlsZip } from "../../../_lib/hlsZip";
 
-const ALLOWED_THUMB_TYPES = new Set([
-  "image/jpeg",
-  "image/png",
-  "image/webp"
-]);
+function isValidPcKey(id: string, key: string) {
+  return key === `videos/${id}/pc.mp4`;
+}
 
-function extForContentType(contentType: string) {
-  if (contentType === "image/png") return "png";
-  if (contentType === "image/webp") return "webp";
-  return "jpg";
+function isValidHlsKey(id: string, key: string) {
+  return key === `videos/${id}/hls/index.m3u8`;
+}
+
+function isValidThumbKey(id: string, key: string) {
+  const prefix = `videos/${id}/thumb.`;
+  if (!key.startsWith(prefix)) return false;
+  const rest = key.slice(prefix.length);
+  return rest.length > 0 && !rest.includes("/");
 }
 
 function prefixFromKey(key?: string | null) {
@@ -64,92 +66,104 @@ export const onRequest: PagesFunction<Env> = async ({ request, env, params }) =>
 
   if (!existing) return errorJson(404, "Not found.");
 
-  const form = await request.formData();
-  const hasTitle = form.has("title");
-  const hasDescription = form.has("description");
-  const title = hasTitle ? form.get("title")?.toString().trim() || "" : null;
-  const description = hasDescription
-    ? form.get("description")?.toString().trim() || ""
-    : null;
-  const mp4 = form.get("mp4");
-  const thumb = form.get("thumb");
-  const hlsZip = form.get("hls_zip");
+  let payload: {
+    title?: string;
+    description?: string;
+    pc_key?: string;
+    thumb_key?: string | null;
+    hls_master_key?: string;
+    size_bytes?: number;
+  } = {};
 
-  if (thumb && thumb instanceof File && thumb.type && !ALLOWED_THUMB_TYPES.has(thumb.type)) {
-    return errorJson(400, "Unsupported thumbnail format.");
+  try {
+    payload = await request.json();
+  } catch {
+    return errorJson(400, "Invalid request.");
   }
+
+  const hasTitle = Object.prototype.hasOwnProperty.call(payload, "title");
+  const hasDescription = Object.prototype.hasOwnProperty.call(
+    payload,
+    "description"
+  );
+  const hasPcKey = Object.prototype.hasOwnProperty.call(payload, "pc_key");
+  const hasThumbKey = Object.prototype.hasOwnProperty.call(payload, "thumb_key");
+  const hasHlsKey = Object.prototype.hasOwnProperty.call(
+    payload,
+    "hls_master_key"
+  );
 
   const updates: string[] = [];
   const paramsList: Array<string | number | null> = [];
   const now = new Date().toISOString();
 
-  let pcKey = existing.pc_key || existing.r2_key || `videos/${id}/pc.mp4`;
-  let thumbKey = existing.thumb_key || existing.thumbnail_key || null;
-  let hlsMasterKey = existing.hls_master_key || null;
+  const currentThumbKey = existing.thumb_key || existing.thumbnail_key || null;
+  const currentHlsKey = existing.hls_master_key || null;
 
   if (hasTitle) {
+    const title = payload.title?.toString().trim() || "";
     updates.push("title = ?");
     paramsList.push(title || existing.title);
   }
 
   if (hasDescription) {
+    const description = payload.description?.toString().trim() || "";
     updates.push("description = ?");
     paramsList.push(description || null);
   }
 
-  if (mp4 instanceof File) {
-    await env.R2_VIDEOS.put(pcKey, mp4.stream(), {
-      httpMetadata: { contentType: mp4.type || "video/mp4" }
-    });
+  if (hasPcKey) {
+    const pcKey = payload.pc_key?.toString().trim() || "";
+    if (!pcKey || !isValidPcKey(id, pcKey)) {
+      return errorJson(400, "Invalid pc_key.");
+    }
     updates.push("pc_key = ?", "r2_key = ?", "size_bytes = ?");
-    paramsList.push(pcKey, pcKey, mp4.size);
+    const sizeBytes =
+      typeof payload.size_bytes === "number" && Number.isFinite(payload.size_bytes)
+        ? Math.max(0, Math.floor(payload.size_bytes))
+        : null;
+    paramsList.push(pcKey, pcKey, sizeBytes);
   }
 
-  if (thumb instanceof File) {
-    const nextThumbKey = `videos/${id}/thumb.${extForContentType(thumb.type || "")}`;
-    await env.R2_VIDEOS.put(nextThumbKey, thumb.stream(), {
-      httpMetadata: { contentType: thumb.type || "image/jpeg" }
-    });
-    if (thumbKey && thumbKey !== nextThumbKey) {
-      await env.R2_VIDEOS.delete(thumbKey);
+  if (hasThumbKey) {
+    if (payload.thumb_key === null) {
+      if (currentThumbKey) {
+        try {
+          await env.R2_VIDEOS.delete(currentThumbKey);
+        } catch {
+          // Best-effort cleanup.
+        }
+      }
+      updates.push("thumb_key = ?", "thumbnail_key = ?");
+      paramsList.push(null, null);
+    } else {
+      const nextThumbKey = payload.thumb_key?.toString().trim() || "";
+      if (!nextThumbKey || !isValidThumbKey(id, nextThumbKey)) {
+        return errorJson(400, "Invalid thumb_key.");
+      }
+      if (currentThumbKey && currentThumbKey !== nextThumbKey) {
+        try {
+          await env.R2_VIDEOS.delete(currentThumbKey);
+        } catch {
+          // Best-effort cleanup.
+        }
+      }
+      updates.push("thumb_key = ?", "thumbnail_key = ?");
+      paramsList.push(nextThumbKey, nextThumbKey);
     }
-    thumbKey = nextThumbKey;
-    updates.push("thumb_key = ?", "thumbnail_key = ?");
-    paramsList.push(nextThumbKey, nextThumbKey);
   }
 
-  if (hlsZip instanceof File) {
-    let files: Array<{ path: string; data: Uint8Array; contentType: string }> = [];
-    let masterPath = "";
-    try {
-      const hlsBuffer = await hlsZip.arrayBuffer();
-      const extracted = await extractHlsZip(hlsBuffer);
-      files = extracted.files;
-      masterPath = extracted.masterPath;
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Invalid HLS ZIP.";
-      return errorJson(400, message);
+  if (hasHlsKey) {
+    const nextHlsKey = payload.hls_master_key?.toString().trim() || "";
+    if (!nextHlsKey || !isValidHlsKey(id, nextHlsKey)) {
+      return errorJson(400, "Invalid hls_master_key.");
     }
-    if (!masterPath) {
-      return errorJson(400, "Invalid HLS ZIP.");
-    }
-
-    const newPrefix = `videos/${id}/hls_new/`;
-    const newMasterKey = `${newPrefix}${masterPath}`;
-
-    for (const file of files) {
-      await env.R2_VIDEOS.put(`${newPrefix}${file.path}`, file.data, {
-        httpMetadata: { contentType: file.contentType }
-      });
-    }
-
-    const previousPrefix = prefixFromKey(hlsMasterKey);
-    hlsMasterKey = newMasterKey;
     updates.push("hls_master_key = ?");
-    paramsList.push(newMasterKey);
+    paramsList.push(nextHlsKey);
 
-    if (previousPrefix && previousPrefix !== newPrefix) {
+    const previousPrefix = prefixFromKey(currentHlsKey);
+    const nextPrefix = prefixFromKey(nextHlsKey);
+    if (previousPrefix && nextPrefix && previousPrefix !== nextPrefix) {
       try {
         const list = await env.R2_VIDEOS.list({ prefix: previousPrefix });
         if (list.objects.length > 0) {
