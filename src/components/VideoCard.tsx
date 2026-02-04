@@ -53,16 +53,6 @@ export default function VideoCard({ video }: { video: VideoItem }) {
     element.play().catch(() => undefined);
   }, [shouldLoad, src]);
 
-  const dateText = useMemo(() => {
-    const date = new Date(video.created_at);
-    if (Number.isNaN(date.getTime())) return "";
-    return date.toLocaleDateString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric"
-    });
-  }, [video.created_at]);
-
   return (
     <Link
       to={`/watch/${video.slug}`}
@@ -85,11 +75,10 @@ export default function VideoCard({ video }: { video: VideoItem }) {
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
         </div>
-        <div className="p-4 space-y-1">
+        <div className="p-4">
           <div className="text-sm font-medium text-white/90 truncate">
             {video.title}
           </div>
-          <div className="text-xs text-white/50">{dateText}</div>
         </div>
       </div>
     </Link>

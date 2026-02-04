@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 
-const HIDE_DELAY = 2500;
-
 function formatTime(value: number) {
   if (!Number.isFinite(value)) return "0:00";
   const totalSeconds = Math.floor(value);
@@ -29,7 +27,6 @@ export default function VideoPlayer({
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [showControls, setShowControls] = useState(true);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [buffered, setBuffered] = useState(0);
@@ -87,39 +84,6 @@ export default function VideoPlayer({
     };
   }, []);
 
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    let timeoutId: number | undefined;
-
-    const scheduleHide = () => {
-      if (!isPlaying) return;
-      timeoutId = window.setTimeout(() => setShowControls(false), HIDE_DELAY);
-    };
-
-    const reset = () => {
-      setShowControls(true);
-      if (timeoutId) {
-        window.clearTimeout(timeoutId);
-      }
-      scheduleHide();
-    };
-
-    reset();
-
-    container.addEventListener("mousemove", reset);
-    container.addEventListener("touchstart", reset, { passive: true });
-
-    return () => {
-      container.removeEventListener("mousemove", reset);
-      container.removeEventListener("touchstart", reset);
-      if (timeoutId) {
-        window.clearTimeout(timeoutId);
-      }
-    };
-  }, [isPlaying]);
-
   const handleSeek = (value: number) => {
     const element = videoRef.current;
     if (!element || !Number.isFinite(value)) return;
@@ -151,10 +115,6 @@ export default function VideoPlayer({
   };
 
   const handleVideoClick = () => {
-    if (isMobile && !document.fullscreenElement) {
-      containerRef.current?.requestFullscreen().catch(() => undefined);
-      return;
-    }
     togglePlay();
   };
 
@@ -164,116 +124,110 @@ export default function VideoPlayer({
   return (
     <div
       ref={containerRef}
-      className="glass-panel w-full max-w-4xl mx-auto overflow-hidden"
+      className="glass-panel w-full max-w-5xl mx-auto overflow-hidden"
     >
-      <div className="relative bg-black/70">
+      <div className="bg-black/70">
         <video
           ref={videoRef}
           src={src}
-          className="w-full h-full max-h-[75vh] object-contain"
+          className="w-full aspect-video max-h-[75vh] object-contain"
           playsInline
           onClick={handleVideoClick}
         />
+      </div>
 
-        <div
-          className={`absolute inset-0 flex items-end transition-opacity duration-300 ${
-            showControls ? "opacity-100" : "opacity-0"
-          }`}
-        >
-          <div className="w-full p-4 md:p-5 glass-soft">
-            <div className="flex items-center justify-between gap-3 mb-3">
-              <div className="text-xs uppercase tracking-[0.2em] text-white/40">
-                {title}
-              </div>
-              <div className="text-xs text-white/50">
-                {formatTime(currentTime)} / {formatTime(duration)}
-              </div>
-            </div>
+      <div className="w-full p-4 md:p-5 space-y-3 glass-soft border-t border-white/10">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="text-xs uppercase tracking-[0.2em] text-white/40">
+            {title}
+          </div>
+          <div className="text-xs text-white/50">
+            {formatTime(currentTime)} / {formatTime(duration)}
+          </div>
+        </div>
 
-            <div className="relative mb-3">
-              <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-white/20"
-                  style={{ width: `${bufferedPercent}%` }}
+        <div className="relative">
+          <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-white/20"
+              style={{ width: `${bufferedPercent}%` }}
+            />
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={duration || 0}
+            step={0.1}
+            value={currentTime}
+            onChange={(event) => handleSeek(Number(event.target.value))}
+            className="absolute inset-0 w-full h-2 opacity-0 cursor-pointer"
+          />
+          <div
+            className="absolute top-0 left-0 h-2 bg-white/60 rounded-full pointer-events-none"
+            style={{ width: `${progressPercent}%` }}
+          />
+        </div>
+
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between text-sm">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={togglePlay}
+              className="px-3 py-2 rounded-lg bg-white/10 text-white/90"
+            >
+              {isPlaying ? "Pause" : "Play"}
+            </button>
+            <button
+              onClick={() => handleSkip(-10)}
+              className="px-3 py-2 rounded-lg bg-white/10 text-white/80"
+            >
+              -10s
+            </button>
+            <button
+              onClick={() => handleSkip(10)}
+              className="px-3 py-2 rounded-lg bg-white/10 text-white/80"
+            >
+              +10s
+            </button>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {isMobile ? (
+              <button
+                onClick={toggleMute}
+                className="px-3 py-2 rounded-lg bg-white/10 text-white/80"
+              >
+                {muted ? "Unmute" : "Mute"}
+              </button>
+            ) : (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={toggleMute}
+                  className="px-3 py-2 rounded-lg bg-white/10 text-white/80"
+                >
+                  {muted ? "Muted" : "Volume"}
+                </button>
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={muted ? 0 : volume}
+                  onChange={(event) => {
+                    const next = Number(event.target.value);
+                    setVolume(next);
+                    if (next > 0 && muted) setMuted(false);
+                  }}
+                  className="w-24"
                 />
               </div>
-              <input
-                type="range"
-                min={0}
-                max={duration || 0}
-                step={0.1}
-                value={currentTime}
-                onChange={(event) => handleSeek(Number(event.target.value))}
-                className="absolute inset-0 w-full h-2 opacity-0 cursor-pointer"
-              />
-              <div
-                className="absolute top-0 left-0 h-2 bg-white/60 rounded-full pointer-events-none"
-                style={{ width: `${progressPercent}%` }}
-              />
-            </div>
+            )}
 
-            <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={togglePlay}
-                  className="px-3 py-1.5 rounded-lg bg-white/10 text-white/90"
-                >
-                  {isPlaying ? "Pause" : "Play"}
-                </button>
-                <button
-                  onClick={() => handleSkip(-10)}
-                  className="px-3 py-1.5 rounded-lg bg-white/10 text-white/80"
-                >
-                  -10s
-                </button>
-                <button
-                  onClick={() => handleSkip(10)}
-                  className="px-3 py-1.5 rounded-lg bg-white/10 text-white/80"
-                >
-                  +10s
-                </button>
-              </div>
-
-              <div className="flex items-center gap-3">
-                {isMobile ? (
-                  <button
-                    onClick={toggleMute}
-                    className="px-3 py-1.5 rounded-lg bg-white/10 text-white/80"
-                  >
-                    {muted ? "Unmute" : "Mute"}
-                  </button>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={toggleMute}
-                      className="px-3 py-1.5 rounded-lg bg-white/10 text-white/80"
-                    >
-                      {muted ? "Muted" : "Volume"}
-                    </button>
-                    <input
-                      type="range"
-                      min={0}
-                      max={1}
-                      step={0.01}
-                      value={muted ? 0 : volume}
-                      onChange={(event) => {
-                        const next = Number(event.target.value);
-                        setVolume(next);
-                        if (next > 0 && muted) setMuted(false);
-                      }}
-                      className="w-28"
-                    />
-                  </div>
-                )}
-
-                <button
-                  onClick={toggleFullscreen}
-                  className="px-3 py-1.5 rounded-lg bg-white/10 text-white/80"
-                >
-                  Fullscreen
-                </button>
-              </div>
-            </div>
+            <button
+              onClick={toggleFullscreen}
+              className="px-3 py-2 rounded-lg bg-white/10 text-white/80"
+            >
+              Fullscreen
+            </button>
           </div>
         </div>
       </div>
