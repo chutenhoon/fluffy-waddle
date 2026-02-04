@@ -51,6 +51,84 @@ function contentTypeForPath(path: string) {
   return EXT_CONTENT_TYPES[ext] || "application/octet-stream";
 }
 
+function pickThumbnailTime(duration: number) {
+  if (!Number.isFinite(duration) || duration <= 0) return 0.1;
+  const maxSeek = Math.min(duration * 0.2, 30);
+  const minSeek = Math.min(duration * 0.05, 3);
+  const safeMax = Math.max(minSeek + 0.1, maxSeek);
+  const target = minSeek + Math.random() * (safeMax - minSeek);
+  return Math.min(Math.max(0.1, target), Math.max(0.1, duration - 0.1));
+}
+
+async function generateThumbnailFromVideo(file: File) {
+  return new Promise<Blob>((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const video = document.createElement("video");
+    let settled = false;
+
+    const cleanup = () => {
+      if (settled) return;
+      settled = true;
+      URL.revokeObjectURL(url);
+      video.removeAttribute("src");
+      video.load();
+    };
+
+    const fail = (message: string) => {
+      cleanup();
+      reject(new Error(message));
+    };
+
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = "metadata";
+
+    video.addEventListener("error", () => {
+      fail("Failed to load video for thumbnail.");
+    });
+
+    video.addEventListener("loadedmetadata", () => {
+      const target = pickThumbnailTime(video.duration);
+      try {
+        video.currentTime = target;
+      } catch {
+        fail("Failed to seek video for thumbnail.");
+      }
+    });
+
+    video.addEventListener("seeked", () => {
+      const width = video.videoWidth || 1280;
+      const height = video.videoHeight || 720;
+      const maxWidth = 1280;
+      const scale = Math.min(1, maxWidth / width);
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(width * scale));
+      canvas.height = Math.max(1, Math.round(height * scale));
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        fail("Failed to render thumbnail.");
+        return;
+      }
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) {
+            fail("Failed to encode thumbnail.");
+            return;
+          }
+          cleanup();
+          resolve(blob);
+        },
+        "image/jpeg",
+        0.85
+      );
+    });
+
+    video.src = url;
+    video.load();
+  });
+}
+
 function normalizeZipPath(value: string) {
   let path = value.replace(/\\/g, "/");
   while (path.startsWith("./")) {
@@ -309,6 +387,16 @@ export default function Admin() {
           `thumb.${ext}`,
           thumbFile,
           thumbType
+        );
+      } else {
+        setUploadStatus("Generating thumbnail...");
+        const autoThumb = await generateThumbnailFromVideo(mp4File);
+        setUploadStatus("Uploading thumbnail...");
+        thumbKey = await uploadToR2(
+          videoId,
+          "thumb.jpg",
+          autoThumb,
+          "image/jpeg"
         );
       }
 
