@@ -26,6 +26,12 @@ function isAllowedPath(path: string) {
   return false;
 }
 
+function isAllowedAudioPath(path: string) {
+  if (path.startsWith("audio.") && !path.includes("/")) return true;
+  if (path.startsWith("thumb.") && !path.includes("/")) return true;
+  return false;
+}
+
 export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
   if (request.method !== "POST") {
     return new Response(null, { status: 405 });
@@ -47,6 +53,7 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
 
   let payload: {
     videoId?: string;
+    audioId?: string;
     path?: string;
     contentType?: string;
   } = {};
@@ -58,22 +65,45 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
   }
 
   const videoId = payload.videoId?.trim() || "";
+  const audioId = payload.audioId?.trim() || "";
   const path = payload.path?.trim() || "";
   const contentType = payload.contentType?.trim() || "";
 
-  if (!videoId || !path || !contentType) {
+  if (!path || !contentType) {
     return errorJson(400, "Missing upload fields.");
   }
 
-  if (!isValidUuid(videoId)) {
-    return errorJson(400, "Invalid video id.");
+  const hasVideo = Boolean(videoId);
+  const hasAudio = Boolean(audioId);
+  if (hasVideo === hasAudio) {
+    return errorJson(400, "Missing upload target.");
   }
 
-  if (!isSafePath(path) || !isAllowedPath(path)) {
-    return errorJson(400, "Invalid upload path.");
+  if (hasVideo) {
+    if (!isValidUuid(videoId)) {
+      return errorJson(400, "Invalid video id.");
+    }
+    if (!isSafePath(path) || !isAllowedPath(path)) {
+      return errorJson(400, "Invalid upload path.");
+    }
+  } else {
+    if (!isValidUuid(audioId)) {
+      return errorJson(400, "Invalid audio id.");
+    }
+    if (!isSafePath(path) || !isAllowedAudioPath(path)) {
+      return errorJson(400, "Invalid upload path.");
+    }
+    if (path.startsWith("audio.") && !contentType.startsWith("audio/")) {
+      return errorJson(400, "Invalid audio content type.");
+    }
+    if (path.startsWith("thumb.") && !contentType.startsWith("image/")) {
+      return errorJson(400, "Invalid thumbnail content type.");
+    }
   }
 
-  const objectKey = `videos/${videoId}/${path}`;
+  const objectKey = hasVideo
+    ? `videos/${videoId}/${path}`
+    : `audios/${audioId}/${path}`;
 
   try {
     const uploadUrl = await presignObjectUpload(env, objectKey, contentType);

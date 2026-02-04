@@ -20,6 +20,17 @@ type AdminVideoDetail = AdminVideo & {
   thumb_key?: string | null;
 };
 
+type AdminAudio = {
+  id: string;
+  title: string;
+  note_system_error?: number | null;
+  description?: string | null;
+  audio_key?: string | null;
+  thumb_key?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 type AuthState = "checking" | "guest" | "authed";
 
 type HlsEntry = {
@@ -40,6 +51,10 @@ const EXT_CONTENT_TYPES: Record<string, string> = {
   ts: "video/mp2t",
   m4s: "video/iso.segment",
   mp4: "video/mp4",
+  mp3: "audio/mpeg",
+  m4a: "audio/mp4",
+  wav: "audio/wav",
+  ogg: "audio/ogg",
   jpg: "image/jpeg",
   jpeg: "image/jpeg",
   png: "image/png",
@@ -222,28 +237,46 @@ function thumbContentType(file: File, ext: string) {
   return EXT_CONTENT_TYPES[ext] || "image/jpeg";
 }
 
-async function requestPresign(
-  videoId: string,
-  path: string,
-  contentType: string
-) {
+function audioExtension(file: File) {
+  const ext = file.name.split(".").pop()?.toLowerCase() || "";
+  if (ext === "mp3" || ext === "m4a" || ext === "wav" || ext === "ogg") {
+    return ext;
+  }
+  if (file.type === "audio/mpeg") return "mp3";
+  if (file.type === "audio/mp4") return "m4a";
+  if (file.type === "audio/wav") return "wav";
+  if (file.type === "audio/ogg") return "ogg";
+  return "mp3";
+}
+
+function audioContentType(file: File, ext: string) {
+  if (file.type) return file.type;
+  return EXT_CONTENT_TYPES[ext] || "audio/mpeg";
+}
+
+async function requestPresign(params: {
+  videoId?: string;
+  audioId?: string;
+  path: string;
+  contentType: string;
+}) {
   return apiFetch<PresignResponse>("/api/admin/uploads/presign", {
     method: "POST",
-    body: JSON.stringify({ videoId, path, contentType })
+    body: JSON.stringify(params)
   });
 }
 
 async function uploadToR2(
-  videoId: string,
+  target: { videoId?: string; audioId?: string },
   path: string,
   body: Blob | Uint8Array | File,
   contentType: string
 ) {
-  const { uploadUrl, objectKey } = await requestPresign(
-    videoId,
+  const { uploadUrl, objectKey } = await requestPresign({
+    ...target,
     path,
     contentType
-  );
+  });
   const response = await fetch(uploadUrl, {
     method: "PUT",
     headers: {
@@ -288,6 +321,8 @@ export default function Admin() {
   const [error, setError] = useState<string | null>(null);
   const [videos, setVideos] = useState<AdminVideo[]>([]);
   const [loading, setLoading] = useState(false);
+  const [audios, setAudios] = useState<AdminAudio[]>([]);
+  const [audioLoading, setAudioLoading] = useState(false);
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -307,6 +342,19 @@ export default function Admin() {
   const [editHls, setEditHls] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
 
+  const [audioTitle, setAudioTitle] = useState("");
+  const [audioNote, setAudioNote] = useState(false);
+  const [audioFile, setAudioFile] = useState<File | null>(null);
+  const [audioThumb, setAudioThumb] = useState<File | null>(null);
+  const [creatingAudio, setCreatingAudio] = useState(false);
+
+  const [editingAudioId, setEditingAudioId] = useState<string | null>(null);
+  const [editAudioTitle, setEditAudioTitle] = useState("");
+  const [editAudioNote, setEditAudioNote] = useState(false);
+  const [editAudioFile, setEditAudioFile] = useState<File | null>(null);
+  const [editAudioThumb, setEditAudioThumb] = useState<File | null>(null);
+  const [savingAudio, setSavingAudio] = useState(false);
+
   const loadVideos = async () => {
     setLoading(true);
     setError(null);
@@ -314,6 +362,7 @@ export default function Admin() {
       const data = await apiFetch<AdminVideo[]>("/api/admin/videos");
       setVideos(data || []);
       setAuthState("authed");
+      await loadAudios();
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         setAuthState("guest");
@@ -323,6 +372,18 @@ export default function Admin() {
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadAudios = async () => {
+    setAudioLoading(true);
+    try {
+      const data = await apiFetch<AdminAudio[]>("/api/admin/audios");
+      setAudios(data || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load audio.");
+    } finally {
+      setAudioLoading(false);
     }
   };
 
@@ -351,6 +412,7 @@ export default function Admin() {
     await apiFetchVoid("/api/admin/logout", { method: "POST" });
     setAuthState("guest");
     setVideos([]);
+    setAudios([]);
   };
 
   const handleCreate = async (event: FormEvent) => {
@@ -371,7 +433,7 @@ export default function Admin() {
       setUploadStatus("Uploading MP4...");
       const pcContentType = mp4File.type || "video/mp4";
       const pcKey = await uploadToR2(
-        videoId,
+        { videoId },
         "pc.mp4",
         mp4File,
         pcContentType
@@ -383,7 +445,7 @@ export default function Admin() {
         const thumbType = thumbContentType(thumbFile, ext);
         setUploadStatus("Uploading thumbnail...");
         thumbKey = await uploadToR2(
-          videoId,
+          { videoId },
           `thumb.${ext}`,
           thumbFile,
           thumbType
@@ -393,7 +455,7 @@ export default function Admin() {
         const autoThumb = await generateThumbnailFromVideo(mp4File);
         setUploadStatus("Uploading thumbnail...");
         thumbKey = await uploadToR2(
-          videoId,
+          { videoId },
           "thumb.jpg",
           autoThumb,
           "image/jpeg"
@@ -409,7 +471,7 @@ export default function Admin() {
         async (entry) => {
           const blob = new Blob([entry.data], { type: entry.contentType });
           await uploadToR2(
-            videoId,
+            { videoId },
             `hls/${entry.path}`,
             blob,
             entry.contentType
@@ -490,7 +552,7 @@ export default function Admin() {
         setUploadStatus("Uploading MP4...");
         const pcContentType = editMp4.type || "video/mp4";
         const pcKey = await uploadToR2(
-          editingId,
+          { videoId: editingId },
           "pc.mp4",
           editMp4,
           pcContentType
@@ -504,7 +566,7 @@ export default function Admin() {
         const thumbType = thumbContentType(editThumb, ext);
         setUploadStatus("Uploading thumbnail...");
         const thumbKey = await uploadToR2(
-          editingId,
+          { videoId: editingId },
           `thumb.${ext}`,
           editThumb,
           thumbType
@@ -522,7 +584,7 @@ export default function Admin() {
           async (entry) => {
             const blob = new Blob([entry.data], { type: entry.contentType });
             await uploadToR2(
-              editingId,
+              { videoId: editingId },
               `hls/${entry.path}`,
               blob,
               entry.contentType
@@ -549,6 +611,141 @@ export default function Admin() {
       setError(err instanceof Error ? err.message : "Update failed.");
     } finally {
       setSaving(false);
+      setUploadStatus(null);
+    }
+  };
+
+  const handleCreateAudio = async (event: FormEvent) => {
+    event.preventDefault();
+    const cleanedTitle = audioTitle.trim();
+    if (!cleanedTitle || !audioFile) {
+      setError("Title and audio file are required.");
+      return;
+    }
+
+    setCreatingAudio(true);
+    setError(null);
+    setUploadStatus(null);
+
+    try {
+      const audioId = crypto.randomUUID();
+      const ext = audioExtension(audioFile);
+      const audioType = audioContentType(audioFile, ext);
+      setUploadStatus("Uploading audio...");
+      const audioKey = await uploadToR2(
+        { audioId },
+        `audio.${ext}`,
+        audioFile,
+        audioType
+      );
+
+      let thumbKey: string | null = null;
+      if (audioThumb) {
+        const thumbExt = thumbExtension(audioThumb);
+        const thumbType = thumbContentType(audioThumb, thumbExt);
+        setUploadStatus("Uploading thumbnail...");
+        thumbKey = await uploadToR2(
+          { audioId },
+          `thumb.${thumbExt}`,
+          audioThumb,
+          thumbType
+        );
+      }
+
+      await apiFetchVoid("/api/admin/audios", {
+        method: "POST",
+        body: JSON.stringify({
+          id: audioId,
+          title: cleanedTitle,
+          note_system_error: audioNote ? 1 : 0,
+          audio_key: audioKey,
+          thumb_key: thumbKey || undefined
+        })
+      });
+
+      setAudioTitle("");
+      setAudioNote(false);
+      setAudioFile(null);
+      setAudioThumb(null);
+      await loadAudios();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed.");
+    } finally {
+      setCreatingAudio(false);
+      setUploadStatus(null);
+    }
+  };
+
+  const handleEditAudio = async (id: string) => {
+    setError(null);
+    setEditingAudioId(id);
+    setSavingAudio(true);
+    try {
+      const data = await apiFetch<AdminAudio>(`/api/admin/audios/${id}`);
+      setEditAudioTitle(data.title);
+      setEditAudioNote(Boolean(data.note_system_error));
+      setEditAudioFile(null);
+      setEditAudioThumb(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load.");
+      setEditingAudioId(null);
+    } finally {
+      setSavingAudio(false);
+    }
+  };
+
+  const handleSaveAudio = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!editingAudioId) return;
+
+    setSavingAudio(true);
+    setError(null);
+    setUploadStatus(null);
+
+    try {
+      const payload: Record<string, unknown> = {
+        title: editAudioTitle.trim(),
+        note_system_error: editAudioNote ? 1 : 0
+      };
+
+      if (editAudioFile) {
+        const ext = audioExtension(editAudioFile);
+        const audioType = audioContentType(editAudioFile, ext);
+        setUploadStatus("Uploading audio...");
+        const audioKey = await uploadToR2(
+          { audioId: editingAudioId },
+          `audio.${ext}`,
+          editAudioFile,
+          audioType
+        );
+        payload.audio_key = audioKey;
+      }
+
+      if (editAudioThumb) {
+        const thumbExt = thumbExtension(editAudioThumb);
+        const thumbType = thumbContentType(editAudioThumb, thumbExt);
+        setUploadStatus("Uploading thumbnail...");
+        const thumbKey = await uploadToR2(
+          { audioId: editingAudioId },
+          `thumb.${thumbExt}`,
+          editAudioThumb,
+          thumbType
+        );
+        payload.thumb_key = thumbKey;
+      }
+
+      setUploadStatus("Saving metadata...");
+      await apiFetchVoid(`/api/admin/audios/${editingAudioId}`, {
+        method: "PUT",
+        body: JSON.stringify(payload)
+      });
+
+      setEditingAudioId(null);
+      await loadAudios();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Update failed.");
+    } finally {
+      setSavingAudio(false);
       setUploadStatus(null);
     }
   };
@@ -810,6 +1007,184 @@ export default function Admin() {
             ))}
             {videos.length === 0 && !loading ? (
               <div className="text-xs text-white/40">No videos yet.</div>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="glass-panel p-6 space-y-4">
+          <div className="text-sm text-white/70">Create new audio</div>
+          <form onSubmit={handleCreateAudio} className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <input
+                type="text"
+                value={audioTitle}
+                onChange={(event) => setAudioTitle(event.target.value)}
+                placeholder="Title"
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white/90 focus:outline-none focus:ring-1 focus:ring-white/20"
+                required
+              />
+              <label className="text-xs text-white/60 flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={audioNote}
+                  onChange={(event) => setAudioNote(event.target.checked)}
+                  className="h-4 w-4"
+                />
+                Do lỗi hệ thống không ghi lại được hình ảnh
+              </label>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="text-xs text-white/50 space-y-1">
+                <span>Audio file (required)</span>
+                <input
+                  type="file"
+                  accept="audio/*"
+                  onChange={(event) =>
+                    setAudioFile(event.target.files?.[0] || null)
+                  }
+                  className="w-full text-sm text-white/70"
+                  required
+                />
+              </label>
+              <label className="text-xs text-white/50 space-y-1">
+                <span>Thumbnail (optional)</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(event) =>
+                    setAudioThumb(event.target.files?.[0] || null)
+                  }
+                  className="w-full text-sm text-white/70"
+                />
+              </label>
+            </div>
+            <button
+              type="submit"
+              disabled={creatingAudio}
+              className="px-4 py-2 rounded-xl bg-white/10 text-sm text-white/90 disabled:opacity-50"
+            >
+              {creatingAudio ? "Uploading..." : "Create audio"}
+            </button>
+            {creatingAudio && uploadStatus ? (
+              <div className="text-xs text-white/50">{uploadStatus}</div>
+            ) : null}
+          </form>
+        </div>
+
+        {editingAudioId ? (
+          <div className="glass-panel p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-white/70">Edit audio</div>
+              <button
+                onClick={() => setEditingAudioId(null)}
+                className="text-xs text-white/50 hover:text-white/80"
+              >
+                Cancel
+              </button>
+            </div>
+            <form onSubmit={handleSaveAudio} className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <input
+                  type="text"
+                  value={editAudioTitle}
+                  onChange={(event) => setEditAudioTitle(event.target.value)}
+                  placeholder="Title"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white/90 focus:outline-none focus:ring-1 focus:ring-white/20"
+                  required
+                />
+                <label className="text-xs text-white/60 flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={editAudioNote}
+                    onChange={(event) => setEditAudioNote(event.target.checked)}
+                    className="h-4 w-4"
+                  />
+                  Do lỗi hệ thống không ghi lại được hình ảnh
+                </label>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="text-xs text-white/50 space-y-1">
+                  <span>Replace audio</span>
+                  <input
+                    type="file"
+                    accept="audio/*"
+                    onChange={(event) =>
+                      setEditAudioFile(event.target.files?.[0] || null)
+                    }
+                    className="w-full text-sm text-white/70"
+                  />
+                </label>
+                <label className="text-xs text-white/50 space-y-1">
+                  <span>Replace thumbnail</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(event) =>
+                      setEditAudioThumb(event.target.files?.[0] || null)
+                    }
+                    className="w-full text-sm text-white/70"
+                  />
+                </label>
+              </div>
+              <button
+                type="submit"
+                disabled={savingAudio}
+                className="px-4 py-2 rounded-xl bg-white/10 text-sm text-white/90 disabled:opacity-50"
+              >
+                {savingAudio ? "Saving..." : "Save changes"}
+              </button>
+              {savingAudio && uploadStatus ? (
+                <div className="text-xs text-white/50">{uploadStatus}</div>
+              ) : null}
+            </form>
+          </div>
+        ) : null}
+
+        <div className="glass-panel p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-white/70">Audios</div>
+            {audioLoading ? (
+              <div className="text-xs text-white/40">Loading...</div>
+            ) : null}
+          </div>
+
+          <div className="grid gap-3">
+            {audios.map((audio) => (
+              <div
+                key={audio.id}
+                className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2"
+              >
+                <div className="flex items-center gap-3">
+                  {audio.thumb_key ? (
+                    <img
+                      src={`/media/${audio.thumb_key}`}
+                      alt=""
+                      className="h-10 w-10 rounded-md object-cover border border-white/10"
+                    />
+                  ) : (
+                    <div className="h-10 w-10 rounded-md bg-white/5 border border-white/10 flex items-center justify-center text-xs text-white/40">
+                      Audio
+                    </div>
+                  )}
+                  <div>
+                    <div className="text-sm text-white/90">{audio.title}</div>
+                    {audio.note_system_error ? (
+                      <div className="text-xs text-white/40">
+                        Do lỗi hệ thống không ghi lại được hình ảnh
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleEditAudio(audio.id)}
+                  className="px-3 py-1.5 rounded-lg bg-white/10 text-xs text-white/80 hover:bg-white/20"
+                >
+                  Edit
+                </button>
+              </div>
+            ))}
+            {audios.length === 0 && !audioLoading ? (
+              <div className="text-xs text-white/40">No audios yet.</div>
             ) : null}
           </div>
         </div>
