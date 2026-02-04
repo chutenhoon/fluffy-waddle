@@ -38,19 +38,6 @@ export default function Watch() {
     [recommendations]
   );
 
-  if (isLoading) {
-    return (
-      <Loading
-        title="Doi xi nha"
-        subtitle="Dang tai video de phat muot hon."
-      />
-    );
-  }
-
-  if (!data) {
-    return <div className="min-h-screen text-white/50 p-6">Not found.</div>;
-  }
-
   useEffect(() => {
     if (typeof window === "undefined") return;
     const saved = window.localStorage.getItem("vms_theater_mode");
@@ -63,6 +50,19 @@ export default function Watch() {
     if (typeof window === "undefined") return;
     window.localStorage.setItem("vms_theater_mode", theaterMode ? "1" : "0");
   }, [theaterMode]);
+
+  if (isLoading) {
+    return (
+      <Loading
+        title="Doi xi nha"
+        subtitle="Dang tai video de phat muot hon."
+      />
+    );
+  }
+
+  if (!data) {
+    return <div className="min-h-screen text-white/50 p-6">Not found.</div>;
+  }
 
   return (
     <div className="min-h-screen px-5 py-6 md:px-10">

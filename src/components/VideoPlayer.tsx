@@ -368,6 +368,7 @@ export default function VideoPlayer({
   const bufferedPercent = duration ? (buffered / duration) * 100 : 0;
   const showBuffering = isBuffering || (pendingPlay && !isPlaying);
   const shouldShowControls = showControls || !isPlaying || showBuffering;
+  const showLoadBar = !isMobile && (showBuffering || !isPlaying);
 
   return (
     <div
@@ -385,6 +386,17 @@ export default function VideoPlayer({
           preload="auto"
           onClick={togglePlay}
         />
+
+        {showLoadBar ? (
+          <div className="absolute left-0 right-0 top-0 h-0.5 bg-white/10">
+            <div
+              className="h-full bg-rose-400"
+              style={{
+                width: `${Math.max(bufferedPercent, progressPercent)}%`
+              }}
+            />
+          </div>
+        ) : null}
 
         {showBuffering ? (
           <div className="absolute inset-0 flex items-center justify-center">
