@@ -1,5 +1,7 @@
 import { useMemo, useState, useCallback } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, apiFetchVoid, ApiError } from "../api/client";
+import type { VideoItem } from "../components/VideoCard";
 
 type CreateUploadResponse = {
   videoId: string;
@@ -48,6 +50,13 @@ export default function Admin() {
     "idle" | "generating" | "ready" | "uploading" | "error"
   >("idle");
   const [thumbnailUploaded, setThumbnailUploaded] = useState(false);
+  const [deletingSlug, setDeletingSlug] = useState<string | null>(null);
+
+  const queryClient = useQueryClient();
+  const { data: videos, isLoading: videosLoading } = useQuery({
+    queryKey: ["videos"],
+    queryFn: () => apiFetch<VideoItem[]>("/api/videos")
+  });
 
   const clearThumbnailPreview = () => {
     if (thumbnailPreview) {
@@ -395,6 +404,34 @@ export default function Admin() {
     file && title && adminKey && thumbnailStatus !== "generating"
   );
 
+  const handleDeleteVideo = async (slug: string) => {
+    if (!adminKey) {
+      setError("Missing admin key.");
+      return;
+    }
+    const ok = window.confirm("Delete this video? This cannot be undone.");
+    if (!ok) return;
+    setDeletingSlug(slug);
+    setError(null);
+
+    try {
+      await apiFetchVoid("/api/admin/videos/delete", {
+        method: "POST",
+        headers: {
+          "x-admin-key": adminKey
+        },
+        body: JSON.stringify({ slug })
+      });
+      await queryClient.invalidateQueries({ queryKey: ["videos"] });
+    } catch (err) {
+      const message =
+        err instanceof ApiError ? err.message : "Unable to delete video.";
+      setError(message);
+    } finally {
+      setDeletingSlug(null);
+    }
+  };
+
   return (
     <div className="min-h-screen px-5 py-8 md:px-10">
       <div className="max-w-4xl mx-auto space-y-6">
@@ -551,6 +588,52 @@ export default function Admin() {
             </div>
           </div>
         ) : null}
+
+        <div className="glass-panel p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-white/70">Manage videos</div>
+            {videosLoading ? (
+              <div className="text-xs text-white/40">Loading...</div>
+            ) : null}
+          </div>
+
+          <div className="grid gap-3">
+            {videos?.map((video) => (
+              <div
+                key={video.id}
+                className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2"
+              >
+                <div className="flex items-center gap-3">
+                  {video.thumbnail_key ? (
+                    <img
+                      src={`/api/videos/${video.slug}/thumb`}
+                      alt=""
+                      className="h-10 w-16 rounded-md object-cover border border-white/10"
+                    />
+                  ) : (
+                    <div className="h-10 w-16 rounded-md bg-white/5 border border-white/10" />
+                  )}
+                  <div>
+                    <div className="text-sm text-white/90">{video.title}</div>
+                    <div className="text-xs text-white/40">{video.slug}</div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => handleDeleteVideo(video.slug)}
+                  disabled={deletingSlug === video.slug}
+                  className="px-3 py-1.5 rounded-lg bg-red-500/15 text-xs text-red-200 hover:bg-red-500/25 disabled:opacity-50"
+                >
+                  {deletingSlug === video.slug ? "Deleting..." : "Delete"}
+                </button>
+              </div>
+            ))}
+
+            {videos?.length === 0 ? (
+              <div className="text-xs text-white/40">No videos yet.</div>
+            ) : null}
+          </div>
+        </div>
       </div>
     </div>
   );

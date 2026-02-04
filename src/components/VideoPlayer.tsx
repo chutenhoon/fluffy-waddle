@@ -121,7 +121,6 @@ export default function VideoPlayer({ src }: { src: string }) {
   const [pendingPlay, setPendingPlay] = useState(false);
   const isMobile = useMediaQuery("(max-width: 768px)");
   const targetBufferAhead = isMobile ? Math.min(duration * 0.5, 45) : 6;
-  const minBufferAhead = isMobile ? 4 : 2;
 
   useEffect(() => {
     const element = videoRef.current;
@@ -165,7 +164,7 @@ export default function VideoPlayer({ src }: { src: string }) {
         if (!bufferWaitStart.current) {
           bufferWaitStart.current = performance.now();
         }
-        element.play().then(() => element.pause()).catch(() => undefined);
+        element.play().catch(() => undefined);
         return;
       }
       element.play().catch(() => undefined);
@@ -230,12 +229,12 @@ export default function VideoPlayer({ src }: { src: string }) {
 
   useEffect(() => {
     if (!pendingPlay) return;
-    if (!duration) return;
     const bufferAhead = Math.max(0, buffered - currentTime);
     const waited = bufferWaitStart.current
       ? performance.now() - bufferWaitStart.current
       : 0;
-    if (bufferAhead >= targetBufferAhead || waited > 8000) {
+    const fallbackTarget = duration ? targetBufferAhead : 6;
+    if (bufferAhead >= fallbackTarget || waited > 6000) {
       setPendingPlay(false);
       bufferWaitStart.current = null;
       videoRef.current?.play().catch(() => undefined);
@@ -248,15 +247,6 @@ export default function VideoPlayer({ src }: { src: string }) {
     targetBufferAhead
   ]);
 
-  useEffect(() => {
-    if (!isMobile || !isPlaying) return;
-    const bufferAhead = Math.max(0, buffered - currentTime);
-    if (bufferAhead < minBufferAhead) {
-      setPendingPlay(true);
-      setIsBuffering(true);
-      videoRef.current?.pause();
-    }
-  }, [buffered, currentTime, isMobile, isPlaying, minBufferAhead]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -350,7 +340,7 @@ export default function VideoPlayer({ src }: { src: string }) {
 
   const progressPercent = duration ? (currentTime / duration) * 100 : 0;
   const bufferedPercent = duration ? (buffered / duration) * 100 : 0;
-  const showBuffering = isBuffering || pendingPlay;
+  const showBuffering = isBuffering || (pendingPlay && !isPlaying);
   const shouldShowControls = showControls || !isPlaying || showBuffering;
 
   return (

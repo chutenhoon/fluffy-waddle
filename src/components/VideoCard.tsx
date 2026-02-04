@@ -69,6 +69,7 @@ export default function VideoCard({ video }: { video: VideoItem }) {
     if (!element || !shouldLoad || !showVideoFallback) return;
     if (!element.src) {
       element.src = src;
+      element.load();
     }
 
     const onLoaded = () => {
@@ -116,6 +117,8 @@ export default function VideoCard({ video }: { video: VideoItem }) {
 
   const thumbSrc = `/api/videos/${video.slug}/thumb`;
   const videoVisible = previewActive || (showVideoFallback && fallbackFrameReady);
+  const preloadMode =
+    shouldLoad && (previewActive || showVideoFallback) ? "auto" : "none";
 
   return (
     <Link
@@ -165,7 +168,7 @@ export default function VideoCard({ video }: { video: VideoItem }) {
             muted
             loop
             playsInline
-            preload={shouldLoad ? "metadata" : "none"}
+            preload={preloadMode}
             className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ${
               videoVisible ? "opacity-100" : "opacity-0"
             }`}
