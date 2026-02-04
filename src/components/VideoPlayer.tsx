@@ -404,8 +404,8 @@ export default function VideoPlayer({
       className="glass-panel video-shell w-full mx-auto overflow-hidden"
     >
       <div
-        className={`relative bg-black/80 aspect-video ${
-          theaterMode ? "max-h-[85vh]" : "max-h-[80vh]"
+        className={`relative bg-black/80 aspect-video mx-auto ${
+          theaterMode ? "w-full" : "max-h-[80vh]"
         }`}
       >
         <video
