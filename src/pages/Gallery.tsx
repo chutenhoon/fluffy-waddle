@@ -39,7 +39,7 @@ export default function Gallery() {
 
   return (
     <div className="min-h-screen px-5 py-8 md:px-10">
-      <div className="max-w-6xl mx-auto space-y-8">
+      <div className="max-w-[1400px] mx-auto space-y-8">
         <header className="grid gap-4 md:grid-cols-[1fr_auto_1fr] md:items-center">
           <div>
             <h1 className="text-2xl font-medium text-white">Memory Vault</h1>
@@ -120,7 +120,7 @@ export default function Gallery() {
           </div>
         ) : null}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {filtered.map((video) => (
             <VideoCard key={video.id} video={video} />
           ))}

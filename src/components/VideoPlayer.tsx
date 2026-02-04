@@ -116,10 +116,12 @@ function ControlButton({
 
 export default function VideoPlayer({
   src,
+  poster,
   theaterMode = false,
   onToggleTheater
 }: {
   src: string;
+  poster?: string;
   theaterMode?: boolean;
   onToggleTheater?: () => void;
 }) {
@@ -400,13 +402,18 @@ export default function VideoPlayer({
     <div
       ref={containerRef}
       className={`glass-panel video-shell w-full mx-auto overflow-hidden ${
-        theaterMode ? "max-w-[1400px]" : "max-w-[1200px]"
+        theaterMode ? "max-w-none" : "max-w-[1400px]"
       }`}
     >
-      <div className="relative bg-black/80 aspect-video max-h-[80vh]">
+      <div
+        className={`relative bg-black/80 aspect-video ${
+          theaterMode ? "max-h-[85vh]" : "max-h-[80vh]"
+        }`}
+      >
         <video
           ref={videoRef}
           src={src}
+          poster={poster}
           className="w-full h-full object-contain"
           playsInline
           preload="auto"

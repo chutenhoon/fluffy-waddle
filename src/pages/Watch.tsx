@@ -13,6 +13,7 @@ type VideoDetail = {
   created_at: string;
   size_bytes: number;
   status: string;
+  thumbnail_key?: string | null;
 };
 
 export default function Watch() {
@@ -64,11 +65,15 @@ export default function Watch() {
     return <div className="min-h-screen text-white/50 p-6">Not found.</div>;
   }
 
+  const posterSrc = data.thumbnail_key
+    ? `/api/videos/${data.slug}/thumb`
+    : undefined;
+
   return (
     <div className="min-h-screen px-5 py-6 md:px-10">
       <div
         className={`mx-auto space-y-6 ${
-          theaterMode ? "max-w-[1600px]" : "max-w-[1320px]"
+          theaterMode ? "max-w-none" : "max-w-[1600px]"
         }`}
       >
         <div className="flex flex-col gap-2">
@@ -80,36 +85,71 @@ export default function Watch() {
           </h1>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
-          <div className={`space-y-6 ${theaterMode ? "lg:flex lg:justify-center" : ""}`}>
-            <VideoPlayer
-              src={`/api/videos/${data.slug}/stream`}
-              theaterMode={theaterMode}
-              onToggleTheater={() => setTheaterMode((prev) => !prev)}
-            />
-          </div>
+        {theaterMode ? (
+          <div className="space-y-8">
+            <div className="flex justify-center">
+              <VideoPlayer
+                src={`/api/videos/${data.slug}/stream`}
+                poster={posterSrc}
+                theaterMode
+                onToggleTheater={() => setTheaterMode((prev) => !prev)}
+              />
+            </div>
 
-          {sidebarVideos.length > 0 ? (
-            <aside className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xs uppercase tracking-[0.3em] text-white/40">
-                  More to watch
-                </h2>
-                <Link
-                  to="/"
-                  className="text-xs text-white/50 hover:text-white/80"
-                >
-                  View all
-                </Link>
+            {sidebarVideos.length > 0 ? (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xs uppercase tracking-[0.3em] text-white/40">
+                    More to watch
+                  </h2>
+                  <Link
+                    to="/"
+                    className="text-xs text-white/50 hover:text-white/80"
+                  >
+                    View all
+                  </Link>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {sidebarVideos.map((video) => (
+                    <VideoCard key={video.id} video={video} />
+                  ))}
+                </div>
               </div>
-              <div className="grid gap-4">
-                {sidebarVideos.map((video) => (
-                  <VideoCard key={video.id} video={video} />
-                ))}
-              </div>
-            </aside>
-          ) : null}
-        </div>
+            ) : null}
+          </div>
+        ) : (
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
+            <div className="space-y-6">
+              <VideoPlayer
+                src={`/api/videos/${data.slug}/stream`}
+                poster={posterSrc}
+                theaterMode={false}
+                onToggleTheater={() => setTheaterMode((prev) => !prev)}
+              />
+            </div>
+
+            {sidebarVideos.length > 0 ? (
+              <aside className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xs uppercase tracking-[0.3em] text-white/40">
+                    More to watch
+                  </h2>
+                  <Link
+                    to="/"
+                    className="text-xs text-white/50 hover:text-white/80"
+                  >
+                    View all
+                  </Link>
+                </div>
+                <div className="grid gap-4">
+                  {sidebarVideos.map((video) => (
+                    <VideoCard key={video.id} video={video} />
+                  ))}
+                </div>
+              </aside>
+            ) : null}
+          </div>
+        )}
       </div>
     </div>
   );
