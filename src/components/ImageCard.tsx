@@ -39,10 +39,10 @@ export default function ImageCard({
   const [index, setIndex] = useState(0);
   const [slideDir, setSlideDir] = useState(0);
   const [phase, setPhase] = useState<"idle" | "out" | "in">("idle");
-  const animRef = useRef<number | null>(null);
-  const rafRef = useRef<number | null>(null);
+  const outRef = useRef<number | null>(null);
+  const inRef = useRef<number | null>(null);
   const [loadingAlbum, setLoadingAlbum] = useState(false);
-  const animationMs = 240;
+  const animationMs = 260;
 
   useEffect(() => {
     setIndex(0);
@@ -51,11 +51,11 @@ export default function ImageCard({
 
   useEffect(() => {
     return () => {
-      if (animRef.current) {
-        window.clearTimeout(animRef.current);
+      if (outRef.current) {
+        window.clearTimeout(outRef.current);
       }
-      if (rafRef.current) {
-        window.cancelAnimationFrame(rafRef.current);
+      if (inRef.current) {
+        window.clearTimeout(inRef.current);
       }
     };
   }, []);
@@ -87,18 +87,18 @@ export default function ImageCard({
     const next = (index + dir + total) % total;
     setSlideDir(dir);
     setPhase("out");
-    if (animRef.current) {
-      window.clearTimeout(animRef.current);
+    if (outRef.current) {
+      window.clearTimeout(outRef.current);
     }
-    if (rafRef.current) {
-      window.cancelAnimationFrame(rafRef.current);
+    if (inRef.current) {
+      window.clearTimeout(inRef.current);
     }
-    animRef.current = window.setTimeout(() => {
+    outRef.current = window.setTimeout(() => {
       setIndex(next);
       setPhase("in");
-      rafRef.current = window.requestAnimationFrame(() => {
+      inRef.current = window.setTimeout(() => {
         setPhase("idle");
-      });
+      }, animationMs);
     }, animationMs);
   };
 
@@ -111,18 +111,18 @@ export default function ImageCard({
   const previewSrc = previewKey ? `/media/${previewKey}` : "";
   const resolvedTotal = albumImages?.length || baseCount;
   const displayIndex = canNavigate ? Math.min(index + 1, resolvedTotal) : 1;
-  const slideOffset = slideDir >= 0 ? 8 : -8;
+  const slideOffset = slideDir >= 0 ? 24 : -24;
   const animStyle =
     phase === "idle"
       ? { opacity: 1, transform: "translateX(0) scale(1)" }
       : phase === "out"
         ? {
             opacity: 0,
-            transform: `translateX(${slideOffset * -1}%) scale(0.985)`
+            transform: `translateX(${slideOffset * -1}px) scale(0.985)`
           }
         : {
             opacity: 0,
-            transform: `translateX(${slideOffset}%) scale(0.985)`
+            transform: `translateX(${slideOffset}px) scale(0.985)`
           };
 
   return (
@@ -139,7 +139,9 @@ export default function ImageCard({
             className="absolute inset-0 h-full w-full object-cover transform-gpu transition-[transform,opacity] ease-out"
             style={{
               ...animStyle,
-              transitionDuration: `${animationMs}ms`
+              transitionDuration: `${animationMs}ms`,
+              transitionTimingFunction: "cubic-bezier(0.22, 0.61, 0.36, 1)",
+              willChange: "transform, opacity"
             }}
           />
         ) : (

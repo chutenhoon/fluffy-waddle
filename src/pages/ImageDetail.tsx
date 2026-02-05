@@ -123,48 +123,55 @@ export default function ImageDetail() {
         ) : (
           <div className="space-y-4">
             <div className="space-y-3">
-              <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h1 className="text-2xl font-medium text-white">
+                  {data.title}
+                </h1>
+                {data.description ? (
+                  <p className="text-sm text-white/50 mt-1">
+                    {data.description}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="sticky top-24 z-20 flex justify-end">
+              <div className="flex items-center gap-3 rounded-full border border-white/10 bg-black/60 px-3 py-2 text-xs text-white/70 shadow-glass backdrop-blur">
                 <div>
-                  <h1 className="text-2xl font-medium text-white">
-                    {data.title}
-                  </h1>
-                  {data.description ? (
-                    <p className="text-sm text-white/50 mt-1">
-                      {data.description}
-                    </p>
-                  ) : null}
+                  {Math.min(activeIndex + 1, data.images.length || 1)}/
+                  {data.images.length || 1}
                 </div>
-                <div className="flex items-center gap-3 text-xs text-white/60">
-                  <div>
-                    {Math.min(activeIndex + 1, data.images.length || 1)}/
-                    {data.images.length || 1}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const next = Math.max(0, activeIndex - 1);
-                      itemRefs.current[next]?.scrollIntoView({ block: "start" });
-                    }}
-                    className="h-8 w-8 rounded-full bg-white/10 text-white/80 hover:bg-white/20"
-                    aria-label="Previous image"
-                  >
-                    <span aria-hidden>{"‹"}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const next = Math.min(
-                        data.images.length - 1,
-                        activeIndex + 1
-                      );
-                      itemRefs.current[next]?.scrollIntoView({ block: "start" });
-                    }}
-                    className="h-8 w-8 rounded-full bg-white/10 text-white/80 hover:bg-white/20"
-                    aria-label="Next image"
-                  >
-                    <span aria-hidden>{"›"}</span>
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = Math.max(0, activeIndex - 1);
+                    itemRefs.current[next]?.scrollIntoView({
+                      block: "start",
+                      behavior: "smooth"
+                    });
+                  }}
+                  className="h-8 w-8 rounded-full bg-white/10 text-white/80 hover:bg-white/20"
+                  aria-label="Previous image"
+                >
+                  <span aria-hidden>{"‹"}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = Math.min(
+                      data.images.length - 1,
+                      activeIndex + 1
+                    );
+                    itemRefs.current[next]?.scrollIntoView({
+                      block: "start",
+                      behavior: "smooth"
+                    });
+                  }}
+                  className="h-8 w-8 rounded-full bg-white/10 text-white/80 hover:bg-white/20"
+                  aria-label="Next image"
+                >
+                  <span aria-hidden>{"›"}</span>
+                </button>
               </div>
             </div>
 
