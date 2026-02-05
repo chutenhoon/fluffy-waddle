@@ -42,6 +42,14 @@ function IconVolume({ muted }: { muted: boolean }) {
   );
 }
 
+function formatTime(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return "0:00";
+  const total = Math.floor(value);
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
 function ShortSlide({
   short,
   active
@@ -52,8 +60,12 @@ function ShortSlide({
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [muted, setMuted] = useState(true);
-  const [volume, setVolume] = useState(0.8);
+  const [muted, setMuted] = useState(false);
+  const [volume, setVolume] = useState(1);
+  const [showVolume, setShowVolume] = useState(false);
+  const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [seeking, setSeeking] = useState(false);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -80,6 +92,8 @@ function ShortSlide({
     if (!active) {
       video.pause();
       setIsPlaying(false);
+      setCurrentTime(0);
+      setDuration(0);
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;
@@ -109,7 +123,14 @@ function ShortSlide({
     video
       .play()
       .then(() => setIsPlaying(true))
-      .catch(() => setIsPlaying(false));
+      .catch(() => {
+        setIsPlaying(false);
+        if (!video.muted) {
+          video.muted = true;
+          setMuted(true);
+          video.play().then(() => setIsPlaying(true)).catch(() => undefined);
+        }
+      });
 
     return () => {
       if (hlsRef.current) {
@@ -132,6 +153,23 @@ function ShortSlide({
     };
   }, []);
 
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const onTime = () => {
+      if (!seeking) setCurrentTime(video.currentTime || 0);
+    };
+    const onLoaded = () => setDuration(video.duration || 0);
+    video.addEventListener("timeupdate", onTime);
+    video.addEventListener("loadedmetadata", onLoaded);
+    video.addEventListener("durationchange", onLoaded);
+    return () => {
+      video.removeEventListener("timeupdate", onTime);
+      video.removeEventListener("loadedmetadata", onLoaded);
+      video.removeEventListener("durationchange", onLoaded);
+    };
+  }, [seeking]);
+
   const togglePlay = () => {
     const video = videoRef.current;
     if (!video) return;
@@ -152,6 +190,14 @@ function ShortSlide({
     setMuted(next === 0);
   };
 
+  const handleSeek = (value: number) => {
+    const video = videoRef.current;
+    setCurrentTime(value);
+    if (video) {
+      video.currentTime = value;
+    }
+  };
+
   return (
     <div className="relative h-full w-full flex items-center justify-center">
       <div className="relative h-full w-full max-w-[420px] md:max-w-[460px] rounded-3xl overflow-hidden bg-black shadow-[0_20px_60px_rgba(0,0,0,0.45)] border border-white/10">
@@ -167,7 +213,7 @@ function ShortSlide({
           onClick={togglePlay}
         />
 
-        <div className="absolute inset-x-0 bottom-0 px-4 pb-4 pt-10 bg-gradient-to-t from-black/70 via-black/20 to-transparent">
+        <div className="absolute inset-x-0 bottom-0 px-4 pb-4 pt-12 bg-gradient-to-t from-black/70 via-black/20 to-transparent">
           <div className="flex items-center justify-between text-white/90 text-xs mb-3">
             <div className="max-w-[70%] text-sm font-medium">
               {short.title}
@@ -180,23 +226,56 @@ function ShortSlide({
               {isPlaying ? <IconPause /> : <IconPlay />}
             </button>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={toggleMute}
-              className="h-8 w-8 rounded-full bg-white/15 text-white flex items-center justify-center"
-              aria-label="Mute"
-            >
-              <IconVolume muted={muted} />
-            </button>
+
+          <div className="flex items-center gap-2 text-white/70 text-[11px]">
+            <span className="tabular-nums w-10">{formatTime(currentTime)}</span>
             <input
               type="range"
               min={0}
-              max={1}
-              step={0.01}
-              value={muted ? 0 : volume}
-              onChange={(event) => handleVolumeChange(Number(event.target.value))}
+              max={duration || 0}
+              step={0.1}
+              value={currentTime}
+              onChange={(event) => handleSeek(Number(event.target.value))}
+              onPointerDown={() => setSeeking(true)}
+              onPointerUp={() => setSeeking(false)}
               className="flex-1"
             />
+            <span className="tabular-nums w-10 text-right">
+              {formatTime(duration)}
+            </span>
+
+            <div
+              className="relative"
+              onMouseEnter={() => setShowVolume(true)}
+              onMouseLeave={() => setShowVolume(false)}
+            >
+              <button
+                onClick={() => setShowVolume((prev) => !prev)}
+                className="ml-1 h-8 w-8 rounded-full bg-white/15 text-white flex items-center justify-center"
+                aria-label="Mute"
+              >
+                <IconVolume muted={muted} />
+              </button>
+              <div
+                className={`absolute bottom-full mb-2 right-0 w-24 rounded-full bg-black/70 px-2 py-2 transition ${
+                  showVolume
+                    ? "opacity-100 scale-100"
+                    : "opacity-0 scale-95 pointer-events-none"
+                }`}
+              >
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={muted ? 0 : volume}
+                  onChange={(event) =>
+                    handleVolumeChange(Number(event.target.value))
+                  }
+                  className="w-full"
+                />
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -261,7 +340,10 @@ export default function Shorts() {
 
   if (isLoading) {
     return (
-      <Loading title="Đợi xíu nha" subtitle="Đang tải Shorts." />
+      <Loading
+        title="Đợi xíu nha"
+        subtitle="Đang tải Shorts."
+      />
     );
   }
 
@@ -273,7 +355,7 @@ export default function Shorts() {
             to="/videos"
             className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs text-white/80"
           >
-            <span>←</span>
+            <span aria-hidden>{"←"}</span>
             Quay lại video
           </Link>
           <div className="glass-panel p-6 text-sm text-white/60">
@@ -291,7 +373,7 @@ export default function Shorts() {
           to="/videos"
           className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs text-white/80"
         >
-          <span>←</span>
+          <span aria-hidden>{"←"}</span>
           Quay lại video
         </Link>
         <div

@@ -105,7 +105,7 @@ export default function ImageCard({
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
 
         <div className="absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] text-white/90">
-          {isAlbum ? "Album" : "?nh"}
+          {isAlbum ? "Album" : "\u1EA2nh"}
         </div>
 
         {canNavigate ? (
@@ -142,7 +142,7 @@ export default function ImageCard({
           </div>
         ) : null}
         <div className="text-xs text-white/40">
-          {isAlbum ? `Album ? ${resolvedTotal} ?nh` : "?nh"}
+          {isAlbum ? `Album \u00B7 ${resolvedTotal} \u1EA3nh` : "\u1EA2nh"}
         </div>
       </div>
     </Link>

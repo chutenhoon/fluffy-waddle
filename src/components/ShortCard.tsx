@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 export type ShortItem = {
@@ -25,12 +26,40 @@ const poster = `data:image/svg+xml,${posterSvg}`;
 
 export default function ShortCard({ short }: { short: ShortItem }) {
   const thumbSrc = `/api/shorts/${short.slug}/thumb`;
+  const previewSrc = `/api/shorts/${short.slug}/stream`;
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [previewing, setPreviewing] = useState(false);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (!previewing) {
+      video.pause();
+      video.currentTime = 0;
+      return;
+    }
+
+    if (!video.src) {
+      video.src = previewSrc;
+      video.load();
+    }
+
+    video.muted = true;
+    video.loop = true;
+    video.playsInline = true;
+    video.play().catch(() => undefined);
+  }, [previewing, previewSrc]);
 
   return (
     <Link
       to={`/shorts/${short.slug}`}
       className="block group"
       aria-label={`Open ${short.title}`}
+      onMouseEnter={() => setPreviewing(true)}
+      onMouseLeave={() => setPreviewing(false)}
+      onFocus={() => setPreviewing(true)}
+      onBlur={() => setPreviewing(false)}
     >
       <div className="relative aspect-[9/16] overflow-hidden rounded-2xl border border-white/10 bg-white/5 transition-transform duration-300 group-hover:translate-y-[-2px] group-hover:ring-2 group-hover:ring-sky-400/40 group-hover:border-white/20">
         <img
@@ -44,9 +73,20 @@ export default function ShortCard({ short }: { short: ShortItem }) {
             src={thumbSrc}
             alt={short.title}
             loading="lazy"
-            className="absolute inset-0 h-full w-full object-cover"
+            className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-200 ${
+              previewing ? "opacity-0" : "opacity-100"
+            }`}
           />
         ) : null}
+        <video
+          ref={videoRef}
+          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-200 ${
+            previewing ? "opacity-100" : "opacity-0"
+          }`}
+          preload="metadata"
+          playsInline
+          muted
+        />
       </div>
       <div className="mt-2 text-sm font-medium text-white/90 leading-5 max-h-10 overflow-hidden">
         {short.title}

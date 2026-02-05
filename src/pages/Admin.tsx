@@ -104,7 +104,16 @@ type PresignResponse = {
   objectKey: string;
 };
 
+type MultipartInit = {
+  uploadId: string;
+  r2Key: string;
+  partSize: number;
+  totalParts: number;
+  parts: Array<{ partNumber: number; url: string }>;
+};
+
 const HLS_CONCURRENCY = 3;
+const MP4_CONCURRENCY = 4;
 const HLS_MASTER_NAME = "index.m3u8";
 const EXT_CONTENT_TYPES: Record<string, string> = {
   m3u8: "application/vnd.apple.mpegurl",
@@ -350,6 +359,63 @@ async function uploadToR2(
     throw new Error(`Upload failed for ${path}.`);
   }
   return objectKey;
+}
+
+async function uploadMultipartMp4(
+  target: { videoId?: string; shortId?: string },
+  file: File,
+  onProgress?: (done: number, total: number) => void
+) {
+  const contentType =
+    file.type && file.type.startsWith("video/") ? file.type : "video/mp4";
+  const init = await apiFetch<MultipartInit>("/api/admin/uploads/multipart/create", {
+    method: "POST",
+    body: JSON.stringify({
+      ...target,
+      sizeBytes: file.size,
+      contentType
+    })
+  });
+
+  const total = init.totalParts || init.parts.length;
+  if (onProgress) {
+    onProgress(0, total);
+  }
+
+  await runWithConcurrency(
+    init.parts,
+    MP4_CONCURRENCY,
+    async (part) => {
+      const start = (part.partNumber - 1) * init.partSize;
+      const end = Math.min(start + init.partSize, file.size);
+      const chunk = file.slice(start, end);
+      const response = await fetch(part.url, {
+        method: "PUT",
+        body: chunk
+      });
+      if (!response.ok) {
+        throw new Error(`Upload failed for MP4 part ${part.partNumber}.`);
+      }
+    },
+    (done, totalParts) => {
+      if (onProgress) {
+        onProgress(done, totalParts);
+      }
+    }
+  );
+
+  const parts = init.parts.map((part) => ({ partNumber: part.partNumber }));
+  await apiFetchVoid("/api/admin/uploads/multipart/complete", {
+    method: "POST",
+    body: JSON.stringify({
+      uploadId: init.uploadId,
+      r2Key: init.r2Key,
+      parts,
+      totalParts: total
+    })
+  });
+
+  return init.r2Key;
 }
 
 async function runWithConcurrency<T>(
@@ -625,14 +691,14 @@ export default function Admin() {
     try {
       const videoId = crypto.randomUUID();
 
-      setUploadStatus("Uploading MP4...");
-      const pcContentType = mp4File.type || "video/mp4";
-      const pcKey = await uploadToR2(
-        { videoId },
-        "pc.mp4",
-        mp4File,
-        pcContentType
-      );
+      setUploadStatus("Preparing MP4 upload...");
+      const pcKey = await uploadMultipartMp4(
+          { videoId },
+          mp4File,
+          (done, total) => {
+            setUploadStatus(`Uploading MP4 parts ${done}/${total}...`);
+          }
+        );
 
       let thumbKey: string | null = null;
       if (thumbFile) {
@@ -729,14 +795,14 @@ export default function Admin() {
     try {
       const shortId = crypto.randomUUID();
 
-      setUploadStatus("Uploading MP4...");
-      const pcContentType = shortMp4File.type || "video/mp4";
-      const pcKey = await uploadToR2(
-        { shortId },
-        "pc.mp4",
-        shortMp4File,
-        pcContentType
-      );
+      setUploadStatus("Preparing MP4 upload...");
+      const pcKey = await uploadMultipartMp4(
+          { shortId },
+          shortMp4File,
+          (done, total) => {
+            setUploadStatus(`Uploading MP4 parts ${done}/${total}...`);
+          }
+        );
 
       let thumbKey: string | null = null;
       if (shortThumbFile) {
@@ -854,14 +920,14 @@ export default function Admin() {
       };
 
       if (editShortMp4) {
-        setUploadStatus("Uploading MP4...");
-        const pcContentType = editShortMp4.type || "video/mp4";
-        const pcKey = await uploadToR2(
-          { shortId: editingShortId },
-          "pc.mp4",
-          editShortMp4,
-          pcContentType
-        );
+        setUploadStatus("Preparing MP4 upload...");
+        const pcKey = await uploadMultipartMp4(
+            { shortId: editingShortId },
+            editShortMp4,
+            (done, total) => {
+              setUploadStatus(`Uploading MP4 parts ${done}/${total}...`);
+            }
+          );
         payload.pc_key = pcKey;
         payload.size_bytes = editShortMp4.size;
       }
@@ -977,14 +1043,14 @@ export default function Admin() {
       };
 
       if (editMp4) {
-        setUploadStatus("Uploading MP4...");
-        const pcContentType = editMp4.type || "video/mp4";
-        const pcKey = await uploadToR2(
-          { videoId: editingId },
-          "pc.mp4",
-          editMp4,
-          pcContentType
-        );
+        setUploadStatus("Preparing MP4 upload...");
+        const pcKey = await uploadMultipartMp4(
+            { videoId: editingId },
+            editMp4,
+            (done, total) => {
+              setUploadStatus(`Uploading MP4 parts ${done}/${total}...`);
+            }
+          );
         payload.pc_key = pcKey;
         payload.size_bytes = editMp4.size;
       }
@@ -1624,8 +1690,7 @@ export default function Admin() {
               onChange={(event) => setKey(event.target.value)}
               placeholder="Admin key"
               className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white/90 focus:outline-none focus:ring-1 focus:ring-white/20"
-              required
-            />
+                />
             <button
               type="submit"
               className="w-full rounded-xl bg-white/10 text-white/90 py-3 text-sm font-medium hover:bg-white/20 transition"
@@ -2497,19 +2562,19 @@ export default function Admin() {
             </label>
               {albumFiles.length > 0 ? (
                 <div className="flex items-center gap-2 text-xs text-white/50">
-                  <span>{albumFiles.length} ?nh ?? ch?n</span>
+                  <span>{`${albumFiles.length} \u1EA3nh \u0111\u00E3 ch\u1ECDn`}</span>
                   <button
                     type="button"
                     onClick={() => setAlbumFiles([])}
                     className="text-xs text-white/70 underline hover:text-white/90"
                   >
-                    X?a
+                    {"X\u00F3a"}
                   </button>
                 </div>
               ) : null}
             <button
               type="submit"
-              disabled={creatingAlbum}
+              disabled={creatingAlbum || albumFiles.length === 0 || !albumTitle.trim()}
               className="px-4 py-2 rounded-xl bg-white/10 text-sm text-white/90 disabled:opacity-50"
             >
               {creatingAlbum ? "Uploading..." : "Create album"}
