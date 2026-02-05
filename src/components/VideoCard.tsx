@@ -34,6 +34,7 @@ export default function VideoCard({ video }: { video: VideoItem }) {
   const [thumbError, setThumbError] = useState(false);
   const [previewActive, setPreviewActive] = useState(false);
   const [fallbackFrameReady, setFallbackFrameReady] = useState(false);
+  const [duration, setDuration] = useState(0);
   const isMobile = useMediaQuery("(max-width: 768px)");
 
   const isVisible = useIntersection(cardRef, {
@@ -63,6 +64,29 @@ export default function VideoCard({ video }: { video: VideoItem }) {
     }
     element.play().catch(() => undefined);
   }, [previewActive, shouldLoad, src]);
+
+  useEffect(() => {
+    const element = videoRef.current;
+    if (!element || !shouldLoad) return;
+
+    const onLoaded = () => {
+      setDuration(element.duration || 0);
+    };
+
+    element.addEventListener("loadedmetadata", onLoaded);
+
+    if (!element.src) {
+      element.src = src;
+    }
+    if (element.preload !== "metadata") {
+      element.preload = "metadata";
+    }
+    element.load();
+
+    return () => {
+      element.removeEventListener("loadedmetadata", onLoaded);
+    };
+  }, [shouldLoad, src]);
 
   useEffect(() => {
     const element = videoRef.current;
@@ -118,7 +142,27 @@ export default function VideoCard({ video }: { video: VideoItem }) {
   const thumbSrc = `/api/videos/${video.slug}/thumb`;
   const videoVisible = previewActive || (showVideoFallback && fallbackFrameReady);
   const preloadMode =
-    shouldLoad && (previewActive || showVideoFallback) ? "auto" : "none";
+    shouldLoad && (previewActive || showVideoFallback)
+      ? "auto"
+      : shouldLoad
+        ? "metadata"
+        : "none";
+
+  const formatDuration = (value: number) => {
+    if (!Number.isFinite(value) || value <= 0) return "";
+    const total = Math.floor(value);
+    const seconds = total % 60;
+    const minutes = Math.floor(total / 60);
+    const hours = Math.floor(minutes / 60);
+    const mm = hours > 0 ? minutes % 60 : minutes;
+    if (hours > 0) {
+      return `${hours}:${mm.toString().padStart(2, "0")}:${seconds
+        .toString()
+        .padStart(2, "0")}`;
+    }
+    return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+  };
+  const durationLabel = formatDuration(duration);
 
   return (
     <Link
@@ -128,7 +172,7 @@ export default function VideoCard({ video }: { video: VideoItem }) {
     >
       <div
         ref={cardRef}
-        className="glass-card overflow-hidden transition-transform duration-300 group-hover:translate-y-[-2px]"
+        className="glass-card overflow-hidden transition-transform duration-300 group-hover:translate-y-[-2px] group-hover:ring-2 group-hover:ring-sky-400/40 group-hover:border-white/20"
         onMouseEnter={handlePreviewStart}
         onMouseLeave={handlePreviewStop}
         onFocus={handlePreviewStart}
@@ -174,9 +218,14 @@ export default function VideoCard({ video }: { video: VideoItem }) {
             }`}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
+          {durationLabel ? (
+            <div className="absolute bottom-2 right-2 rounded bg-black/70 px-2 py-0.5 text-[11px] font-medium text-white/90">
+              {durationLabel}
+            </div>
+          ) : null}
         </div>
-        <div className="p-4">
-          <div className="text-sm font-medium text-white/90 truncate">
+        <div className="p-4 bg-ink/70 border-t border-white/10">
+          <div className="text-sm font-medium text-white/90 min-h-[2.5rem]">
             {video.title}
           </div>
         </div>

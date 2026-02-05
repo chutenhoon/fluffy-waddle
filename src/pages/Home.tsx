@@ -142,7 +142,7 @@ export default function Home() {
         {filteredVideos.length > 0 ? (
           <section className="space-y-4">
             <SectionHeader title="Video" to="/videos" action="Xem riêng" />
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredVideos.map((video) => (
                 <VideoCard key={video.id} video={video} />
               ))}
@@ -153,7 +153,7 @@ export default function Home() {
         {filteredImages.length > 0 ? (
           <section className="space-y-4">
             <SectionHeader title="Hình ảnh" to="/images" action="Xem riêng" />
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {filteredImages.map((image) => (
                 <ImageCard key={image.id} image={image} />
               ))}
