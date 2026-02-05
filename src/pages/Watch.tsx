@@ -113,9 +113,6 @@ export default function Watch() {
             </svg>
             Quay lại trang chính
           </Link>
-          <h1 className="text-xl md:text-2xl font-medium text-white">
-            {data.title}
-          </h1>
         </div>
 
         {theaterMode ? (
@@ -130,6 +127,9 @@ export default function Watch() {
                 onToggleTheater={() => setTheaterMode((prev) => !prev)}
               />
             </div>
+            <h1 className="text-xl md:text-2xl font-medium text-white">
+              {data.title}
+            </h1>
 
             {sidebarVideos.length > 0 ? (
               <div className="space-y-4">
@@ -163,6 +163,9 @@ export default function Watch() {
                 theaterMode={false}
                 onToggleTheater={() => setTheaterMode((prev) => !prev)}
               />
+              <h1 className="text-xl md:text-2xl font-medium text-white">
+                {data.title}
+              </h1>
             </div>
 
             {sidebarVideos.length > 0 ? (
