@@ -79,8 +79,10 @@ export default function Navbar() {
   );
 
   const brand = (
-    <Link to="/" className="flex flex-col items-center md:items-start">
-      <span className="text-lg font-medium text-white">Memory Vault</span>
+    <Link to="/" className="flex flex-col items-start">
+      <span className="text-base md:text-lg font-medium text-white">
+        Memory Vault
+      </span>
       <span className="text-xs text-white/50 hidden md:block">
         Private moments, held in quiet glass.
       </span>
@@ -138,21 +140,20 @@ export default function Navbar() {
             </div>
           </div>
 
-          <div className="grid grid-cols-[auto,1fr,auto] items-center gap-3 py-3 md:hidden">
-            <button
-              type="button"
-              onClick={() => setDrawerOpen(true)}
-              className="h-10 w-10 rounded-full bg-white/10 text-white/80 flex items-center justify-center transition hover:bg-white/15"
-              aria-label="Open menu"
-            >
-              <div className="space-y-1">
-                <span className="block h-0.5 w-4 bg-current" />
-                <span className="block h-0.5 w-4 bg-current opacity-80" />
-                <span className="block h-0.5 w-4 bg-current opacity-60" />
-              </div>
-            </button>
-
-            <div className="flex items-center justify-center">
+          <div className="flex items-center justify-between gap-3 py-3 md:hidden">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setDrawerOpen(true)}
+                className="h-10 w-10 rounded-full bg-white/10 text-white/80 flex items-center justify-center transition hover:bg-white/15"
+                aria-label="Open menu"
+              >
+                <div className="space-y-1">
+                  <span className="block h-0.5 w-4 bg-current" />
+                  <span className="block h-0.5 w-4 bg-current opacity-80" />
+                  <span className="block h-0.5 w-4 bg-current opacity-60" />
+                </div>
+              </button>
               {brand}
             </div>
 

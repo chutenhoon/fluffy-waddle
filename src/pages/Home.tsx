@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+﻿import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { apiFetch } from "../api/client";
@@ -117,13 +117,7 @@ export default function Home() {
   const anyLoading =
     videosLoading || audiosLoading || imagesLoading || notesLoading;
 
-  if (
-    anyLoading &&
-    !videos &&
-    !audios &&
-    !images &&
-    !notes
-  ) {
+  if (anyLoading && !videos && !audios && !images && !notes) {
     return (
       <Loading
         title="Đợi xíu nha"
@@ -133,11 +127,11 @@ export default function Home() {
   }
 
   const sections = [
-    filteredNotes.length > 0,
     filteredVideos.length > 0,
     filteredImages.length > 0,
     filteredAudios.length > 0,
-    filteredWeb.length > 0
+    filteredWeb.length > 0,
+    filteredNotes.length > 0
   ];
 
   const hasContent = sections.some(Boolean);
@@ -145,28 +139,9 @@ export default function Home() {
   return (
     <div className="min-h-screen px-5 py-8 md:px-10">
       <div className="max-w-[1400px] mx-auto space-y-10">
-        {filteredNotes.length > 0 ? (
-          <section className="space-y-4">
-            <SectionHeader
-              title="Ghi chú"
-              to="/notes"
-              action="Xem riêng"
-            />
-            <div className="grid gap-4 md:grid-cols-2">
-              {filteredNotes.map((note) => (
-                <NoteCard key={note.id} note={note} compact />
-              ))}
-            </div>
-          </section>
-        ) : null}
-
         {filteredVideos.length > 0 ? (
           <section className="space-y-4">
-            <SectionHeader
-              title="Video"
-              to="/videos"
-              action="Xem riêng"
-            />
+            <SectionHeader title="Video" to="/videos" action="Xem riêng" />
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               {filteredVideos.map((video) => (
                 <VideoCard key={video.id} video={video} />
@@ -177,11 +152,7 @@ export default function Home() {
 
         {filteredImages.length > 0 ? (
           <section className="space-y-4">
-            <SectionHeader
-              title="Hình ảnh"
-              to="/images"
-              action="Xem riêng"
-            />
+            <SectionHeader title="Hình ảnh" to="/images" action="Xem riêng" />
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {filteredImages.map((image) => (
                 <ImageCard key={image.id} image={image} />
@@ -192,11 +163,7 @@ export default function Home() {
 
         {filteredAudios.length > 0 ? (
           <section className="space-y-4">
-            <SectionHeader
-              title="Âm thanh"
-              to="/audio"
-              action="Xem riêng"
-            />
+            <SectionHeader title="Âm thanh" to="/audio" action="Xem riêng" />
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {filteredAudios.map((audio) => (
                 <AudioCard key={audio.id} audio={audio} />
@@ -209,8 +176,24 @@ export default function Home() {
           <section className="space-y-4">
             <SectionHeader title="Web" to="/web" action="Xem riêng" />
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {filteredWeb.map((memory, index) => (
-                <WebCard key={memory.slug} memory={memory} index={index} />
+              {filteredWeb.map((memory) => (
+                <WebCard key={memory.slug} memory={memory} />
+              ))}
+            </div>
+          </section>
+        ) : null}
+
+        {filteredNotes.length > 0 ? (
+          <section className="space-y-4">
+            <SectionHeader title="Ghi chú" to="/notes" action="Xem riêng" />
+            <div className="grid gap-4 md:grid-cols-2">
+              {filteredNotes.map((note) => (
+                <NoteCard
+                  key={note.id}
+                  note={note}
+                  compact
+                  href={`/notes/${note.id}`}
+                />
               ))}
             </div>
           </section>

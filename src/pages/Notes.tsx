@@ -42,7 +42,7 @@ export default function Notes() {
 
         <div className="grid gap-4 md:grid-cols-2">
           {filtered.map((note) => (
-            <NoteCard key={note.id} note={note} />
+            <NoteCard key={note.id} note={note} href={`/notes/${note.id}`} />
           ))}
           {filtered.length === 0 ? (
             <div className="text-white/50 text-sm">

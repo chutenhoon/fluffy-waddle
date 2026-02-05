@@ -3,21 +3,19 @@ import { Link, useParams } from "react-router-dom";
 import { apiFetch } from "../api/client";
 import Loading from "../components/Loading";
 
-type ImageDetail = {
+type NoteDetail = {
   id: string;
   title: string;
-  description?: string | null;
-  image_key: string;
-  thumb_key?: string | null;
+  content: string;
   created_at: string;
 };
 
-export default function ImageDetail() {
+export default function NoteDetail() {
   const { id } = useParams();
 
   const { data, isLoading } = useQuery({
-    queryKey: ["image", id],
-    queryFn: () => apiFetch<ImageDetail>(`/api/images/${id}`),
+    queryKey: ["note", id],
+    queryFn: () => apiFetch<NoteDetail>(`/api/notes/${id}`),
     enabled: Boolean(id)
   });
 
@@ -25,7 +23,7 @@ export default function ImageDetail() {
     return (
       <Loading
         title="Đợi xíu nha"
-        subtitle="Đang tải hình ảnh."
+        subtitle="Đang tải ghi chú."
       />
     );
   }
@@ -36,31 +34,23 @@ export default function ImageDetail() {
 
   return (
     <div className="min-h-screen px-5 py-8 md:px-10">
-      <div className="max-w-[1000px] mx-auto space-y-6">
+      <div className="max-w-[900px] mx-auto space-y-6">
         <Link
-          to="/images"
+          to="/notes"
           className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs text-white/70 hover:bg-white/10"
         >
           <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
             <path d="M14.7 5.3 9 11l5.7 5.7-1.4 1.4L6.2 11l7.1-7.1 1.4 1.4z" />
           </svg>
-          Quay lại hình ảnh
+          Quay lại ghi chú
         </Link>
 
         <div className="glass-panel p-5 md:p-6 space-y-4">
           <div>
             <h1 className="text-2xl font-medium text-white">{data.title}</h1>
-            {data.description ? (
-              <p className="text-sm text-white/50 mt-1">{data.description}</p>
-            ) : null}
           </div>
-
-          <div className="rounded-2xl overflow-hidden border border-white/10 bg-black/30 flex items-center justify-center p-3 md:p-4">
-            <img
-              src={`/media/${data.image_key}`}
-              alt={data.title}
-              className="max-h-[70vh] w-auto max-w-full object-contain"
-            />
+          <div className="text-sm text-white/60 whitespace-pre-line leading-7">
+            {data.content}
           </div>
         </div>
       </div>

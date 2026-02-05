@@ -11,6 +11,7 @@ import AudioDetail from "./pages/AudioDetail";
 import Images from "./pages/Images";
 import ImageDetail from "./pages/ImageDetail";
 import Notes from "./pages/Notes";
+import NoteDetail from "./pages/NoteDetail";
 import Web from "./pages/Web";
 import WebDetail from "./pages/WebDetail";
 
@@ -34,6 +35,7 @@ export default function App() {
         <Route path="/images" element={<Images />} />
         <Route path="/images/:id" element={<ImageDetail />} />
         <Route path="/notes" element={<Notes />} />
+        <Route path="/notes/:id" element={<NoteDetail />} />
         <Route path="/web" element={<Web />} />
         <Route path="/web/:slug" element={<WebDetail />} />
         <Route path="*" element={<Home />} />

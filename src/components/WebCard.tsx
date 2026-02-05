@@ -1,42 +1,19 @@
 ﻿import { Link } from "react-router-dom";
 import type { WebMemory } from "../data/webMemories";
 
-const THEMES = [
-  {
-    card: "from-rose-500/25 via-pink-500/10 to-purple-500/20",
-    dot: "bg-rose-400/70"
-  },
-  {
-    card: "from-sky-500/20 via-cyan-500/10 to-indigo-500/20",
-    dot: "bg-sky-400/70"
-  },
-  {
-    card: "from-amber-500/20 via-orange-500/10 to-rose-500/20",
-    dot: "bg-amber-400/70"
-  },
-  {
-    card: "from-emerald-500/20 via-teal-500/10 to-cyan-500/20",
-    dot: "bg-emerald-400/70"
-  }
-];
-
 export default function WebCard({
-  memory,
-  index
+  memory
 }: {
   memory: WebMemory;
-  index: number;
 }) {
-  const theme = THEMES[index % THEMES.length];
-
   return (
     <Link
       to={`/web/${memory.slug}`}
       className="block glass-card overflow-hidden transition-transform duration-200 hover:-translate-y-0.5"
     >
-      <div className={`p-4 bg-gradient-to-br ${theme.card}`}>
-        <div className="flex items-center gap-2 text-xs uppercase tracking-[0.25em] text-white/50">
-          <span className={`h-2 w-2 rounded-full ${theme.dot}`} />
+      <div className="p-4 bg-white/5 border-b border-white/10">
+        <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.25em] text-white/40">
+          <span className="h-1.5 w-1.5 rounded-full bg-white/40" />
           Web Memory
         </div>
         <div className="mt-3 text-base font-medium text-white/90">
@@ -48,7 +25,7 @@ export default function WebCard({
           </div>
         ) : null}
       </div>
-      <div className="px-4 pb-4 text-xs text-white/50">
+      <div className="px-4 py-3 text-xs text-white/50">
         Nhấn để mở
       </div>
     </Link>

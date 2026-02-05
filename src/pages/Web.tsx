@@ -27,8 +27,8 @@ export default function Web() {
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((memory, index) => (
-            <WebCard key={memory.slug} memory={memory} index={index} />
+          {filtered.map((memory) => (
+            <WebCard key={memory.slug} memory={memory} />
           ))}
           {filtered.length === 0 ? (
             <div className="text-white/50 text-sm">

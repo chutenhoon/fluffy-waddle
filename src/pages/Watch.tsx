@@ -104,7 +104,13 @@ export default function Watch() {
         }`}
       >
         <div className="flex flex-col gap-2">
-          <Link to="/" className="text-sm text-white/60 hover:text-white/90">
+          <Link
+            to="/"
+            className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs text-white/70 hover:bg-white/10"
+          >
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
+              <path d="M14.7 5.3 9 11l5.7 5.7-1.4 1.4L6.2 11l7.1-7.1 1.4 1.4z" />
+            </svg>
             Quay lại trang chính
           </Link>
           <h1 className="text-xl md:text-2xl font-medium text-white">
