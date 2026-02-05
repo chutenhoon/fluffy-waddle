@@ -172,62 +172,60 @@ export default function VideoCard({ video }: { video: VideoItem }) {
     >
       <div
         ref={cardRef}
-        className="glass-card overflow-hidden transition-transform duration-300 group-hover:translate-y-[-2px] group-hover:ring-2 group-hover:ring-sky-400/40 group-hover:border-white/20"
+        className="relative aspect-video overflow-hidden rounded-2xl border border-white/10 bg-white/5 transition-transform duration-300 group-hover:translate-y-[-2px] group-hover:ring-2 group-hover:ring-sky-400/40 group-hover:border-white/20"
         onMouseEnter={handlePreviewStart}
         onMouseLeave={handlePreviewStop}
         onFocus={handlePreviewStart}
         onBlur={handlePreviewStop}
       >
-        <div className="relative aspect-video bg-black/40">
-          {(!thumbError && hasThumb && !thumbLoaded) ||
-          (showVideoFallback && !fallbackFrameReady) ? (
-            <div className="absolute inset-0 bg-white/5 animate-pulse" />
-          ) : null}
+        {(!thumbError && hasThumb && !thumbLoaded) ||
+        (showVideoFallback && !fallbackFrameReady) ? (
+          <div className="absolute inset-0 bg-white/5 animate-pulse" />
+        ) : null}
 
+        <img
+          src={poster}
+          alt=""
+          aria-hidden="true"
+          className="h-full w-full object-cover"
+        />
+
+        {hasThumb && !thumbError ? (
           <img
-            src={poster}
-            alt=""
-            aria-hidden="true"
-            className="h-full w-full object-cover"
-          />
-
-          {hasThumb && !thumbError ? (
-            <img
-              src={thumbSrc}
-              alt={video.title}
-              loading="eager"
-              onLoad={() => setThumbLoaded(true)}
-              onError={() => {
-                setThumbError(true);
-                setThumbLoaded(true);
-              }}
-              className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ${
-                thumbLoaded ? "opacity-100" : "opacity-0"
-              }`}
-            />
-          ) : null}
-
-          <video
-            ref={videoRef}
-            muted
-            loop
-            playsInline
-            preload={preloadMode}
+            src={thumbSrc}
+            alt={video.title}
+            loading="eager"
+            onLoad={() => setThumbLoaded(true)}
+            onError={() => {
+              setThumbError(true);
+              setThumbLoaded(true);
+            }}
             className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ${
-              videoVisible ? "opacity-100" : "opacity-0"
+              thumbLoaded ? "opacity-100" : "opacity-0"
             }`}
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
-          {durationLabel ? (
-            <div className="absolute bottom-2 right-2 rounded bg-black/70 px-2 py-0.5 text-[11px] font-medium text-white/90">
-              {durationLabel}
-            </div>
-          ) : null}
-        </div>
-        <div className="p-4">
-          <div className="text-sm font-medium text-white/90 min-h-[2.5rem]">
-            {video.title}
+        ) : null}
+
+        <video
+          ref={videoRef}
+          muted
+          loop
+          playsInline
+          preload={preloadMode}
+          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ${
+            videoVisible ? "opacity-100" : "opacity-0"
+          }`}
+        />
+
+        {durationLabel ? (
+          <div className="absolute bottom-2 right-2 rounded bg-black/70 px-2 py-0.5 text-[11px] font-medium text-white/90">
+            {durationLabel}
           </div>
+        ) : null}
+      </div>
+      <div className="mt-3">
+        <div className="text-sm font-medium text-white/90 leading-5 max-h-10 overflow-hidden">
+          {video.title}
         </div>
       </div>
     </Link>
