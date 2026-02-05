@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiFetch } from "../api/client";
 
@@ -37,12 +37,28 @@ export default function ImageCard({
     null
   );
   const [index, setIndex] = useState(0);
+  const [slideDir, setSlideDir] = useState(0);
+  const [phase, setPhase] = useState<"idle" | "out" | "in">("idle");
+  const animRef = useRef<number | null>(null);
+  const rafRef = useRef<number | null>(null);
   const [loadingAlbum, setLoadingAlbum] = useState(false);
+  const animationMs = 240;
 
   useEffect(() => {
     setIndex(0);
     setAlbumImages(null);
   }, [image.id]);
+
+  useEffect(() => {
+    return () => {
+      if (animRef.current) {
+        window.clearTimeout(animRef.current);
+      }
+      if (rafRef.current) {
+        window.cancelAnimationFrame(rafRef.current);
+      }
+    };
+  }, []);
 
   const loadAlbumImages = async () => {
     if (!canNavigate || albumImages || loadingAlbum) return albumImages;
@@ -64,14 +80,26 @@ export default function ImageCard({
   const handleNavigate = async (dir: number, event: React.MouseEvent) => {
     event.preventDefault();
     event.stopPropagation();
-    if (!canNavigate) return;
+    if (!canNavigate || phase !== "idle") return;
     const items = albumImages || (await loadAlbumImages()) || [];
     const total = items.length || baseCount;
     if (!total) return;
-    setIndex((prev) => {
-      const next = (prev + dir + total) % total;
-      return next;
-    });
+    const next = (index + dir + total) % total;
+    setSlideDir(dir);
+    setPhase("out");
+    if (animRef.current) {
+      window.clearTimeout(animRef.current);
+    }
+    if (rafRef.current) {
+      window.cancelAnimationFrame(rafRef.current);
+    }
+    animRef.current = window.setTimeout(() => {
+      setIndex(next);
+      setPhase("in");
+      rafRef.current = window.requestAnimationFrame(() => {
+        setPhase("idle");
+      });
+    }, animationMs);
   };
 
   const activeItem = albumImages?.[index];
@@ -83,6 +111,19 @@ export default function ImageCard({
   const previewSrc = previewKey ? `/media/${previewKey}` : "";
   const resolvedTotal = albumImages?.length || baseCount;
   const displayIndex = canNavigate ? Math.min(index + 1, resolvedTotal) : 1;
+  const slideOffset = slideDir >= 0 ? 8 : -8;
+  const animStyle =
+    phase === "idle"
+      ? { opacity: 1, transform: "translateX(0) scale(1)" }
+      : phase === "out"
+        ? {
+            opacity: 0,
+            transform: `translateX(${slideOffset * -1}%) scale(0.985)`
+          }
+        : {
+            opacity: 0,
+            transform: `translateX(${slideOffset}%) scale(0.985)`
+          };
 
   return (
     <Link
@@ -95,7 +136,11 @@ export default function ImageCard({
             src={previewSrc}
             alt={image.title}
             loading="lazy"
-            className="absolute inset-0 h-full w-full object-cover"
+            className="absolute inset-0 h-full w-full object-cover transform-gpu transition-[transform,opacity] ease-out"
+            style={{
+              ...animStyle,
+              transitionDuration: `${animationMs}ms`
+            }}
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center text-xs text-white/40">
@@ -104,7 +149,7 @@ export default function ImageCard({
         )}
 
         <div className="absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] text-white/90">
-          {isAlbum ? "Album" : "\u1EA2nh"}
+          {isAlbum ? "Album" : "Ảnh"}
         </div>
 
         {canNavigate ? (
@@ -141,7 +186,7 @@ export default function ImageCard({
           </div>
         ) : null}
         <div className="text-xs text-white/40">
-          {isAlbum ? `Album \u00B7 ${resolvedTotal} \u1EA3nh` : "\u1EA2nh"}
+          {isAlbum ? `Album · ${resolvedTotal} ảnh` : "Ảnh"}
         </div>
       </div>
     </Link>

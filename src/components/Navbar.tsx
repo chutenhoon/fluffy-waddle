@@ -83,10 +83,10 @@ export default function Navbar() {
   const brand = (
     <Link to="/" className="flex flex-col items-start">
       <span className="text-base md:text-lg font-medium text-white">
-        Memory Vault
+        Memory 168
       </span>
       <span className="text-xs text-white/50 hidden md:block">
-        Private moments, held in quiet glass.
+        Anniversary Bank
       </span>
     </Link>
   );

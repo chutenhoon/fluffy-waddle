@@ -37,9 +37,9 @@ export default function Images() {
     <div className="min-h-screen px-5 py-8 md:px-10">
       <div className="max-w-[1400px] mx-auto space-y-6">
         <div>
-          <h1 className="text-xl font-medium text-white">{"H\u00ECnh \u1EA3nh"}</h1>
+          <h1 className="text-xl font-medium text-white">Hình ảnh</h1>
           <p className="text-sm text-white/50">
-            {"Nh\u1EEFng kho\u1EA3nh kh\u1EAFc \u0111\u01B0\u1EE3c l\u01B0u l\u1EA1i."}
+            Những khoảnh khắc được lưu lại.
           </p>
         </div>
 
@@ -49,7 +49,7 @@ export default function Images() {
           ))}
           {filtered.length === 0 ? (
             <div className="text-white/50 text-sm">
-              {query ? "Kh\u00F4ng t\u00ECm th\u1EA5y h\u00ECnh \u1EA3nh." : "Ch\u01B0a c\u00F3 h\u00ECnh \u1EA3nh n\u00E0o."}
+              {query ? "Không tìm thấy hình ảnh." : "Chưa có hình ảnh nào."}
             </div>
           ) : null}
         </div>

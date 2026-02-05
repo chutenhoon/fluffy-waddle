@@ -68,9 +68,7 @@ export default function ImageDetail() {
 
   useEffect(() => {
     if (!data || data.type !== "album" || !data.active_image_id) return;
-    const idx = data.images.findIndex(
-      (img) => img.id === data.active_image_id
-    );
+    const idx = data.images.findIndex((img) => img.id === data.active_image_id);
     if (idx >= 0) {
       itemRefs.current[idx]?.scrollIntoView({ block: "start" });
       setActiveIndex(idx);
@@ -104,7 +102,7 @@ export default function ImageDetail() {
         </Link>
 
         {data.type === "single" ? (
-          <div className="glass-panel p-5 md:p-6 space-y-4">
+          <div className="space-y-4">
             <div>
               <h1 className="text-2xl font-medium text-white">{data.title}</h1>
               {data.description ? (
@@ -114,17 +112,17 @@ export default function ImageDetail() {
               ) : null}
             </div>
 
-            <div className="rounded-2xl overflow-hidden border border-white/10 bg-black/30 flex items-center justify-center p-3 md:p-4">
+            <div className="flex items-center justify-center">
               <img
                 src={`/media/${data.image_key}`}
                 alt={data.title}
-                className="max-h-[75vh] w-auto max-w-full object-contain"
+                className="max-h-[75vh] w-auto max-w-full object-contain rounded-2xl"
               />
             </div>
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="glass-panel p-5 md:p-6 space-y-3">
+            <div className="space-y-3">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <h1 className="text-2xl font-medium text-white">
@@ -150,7 +148,7 @@ export default function ImageDetail() {
                     className="h-8 w-8 rounded-full bg-white/10 text-white/80 hover:bg-white/20"
                     aria-label="Previous image"
                   >
-                    ‹
+                    <span aria-hidden>{"‹"}</span>
                   </button>
                   <button
                     type="button"
@@ -164,7 +162,7 @@ export default function ImageDetail() {
                     className="h-8 w-8 rounded-full bg-white/10 text-white/80 hover:bg-white/20"
                     aria-label="Next image"
                   >
-                    ›
+                    <span aria-hidden>{"›"}</span>
                   </button>
                 </div>
               </div>
@@ -178,13 +176,13 @@ export default function ImageDetail() {
                     itemRefs.current[index] = el;
                   }}
                   data-index={index}
-                  className="rounded-2xl overflow-hidden border border-white/10 bg-black/30 p-3 md:p-4 scroll-mt-24"
+                  className="flex justify-center scroll-mt-24"
                 >
                   <img
                     src={`/media/${image.image_key}`}
                     alt={`${data.title} ${index + 1}`}
                     loading="lazy"
-                    className="w-full max-h-[75vh] object-contain"
+                    className="w-auto max-w-full max-h-[75vh] object-contain rounded-2xl"
                   />
                 </div>
               ))}
