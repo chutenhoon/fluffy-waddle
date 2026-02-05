@@ -79,6 +79,11 @@ export default function Watch() {
     window.localStorage.setItem("vms_theater_mode", theaterMode ? "1" : "0");
   }, [theaterMode]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [slug]);
+
   if (isLoading) {
     return (
       <Loading
