@@ -224,7 +224,7 @@ export default function VideoCard({ video }: { video: VideoItem }) {
             </div>
           ) : null}
         </div>
-        <div className="p-4 bg-ink/70 border-t border-white/10">
+        <div className="p-4">
           <div className="text-sm font-medium text-white/90 min-h-[2.5rem]">
             {video.title}
           </div>
