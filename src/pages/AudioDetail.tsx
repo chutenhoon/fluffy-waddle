@@ -119,7 +119,7 @@ export default function AudioDetail() {
       <div className="max-w-[960px] mx-auto space-y-6">
         <Link
           to="/audio"
-          className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs text-white/70 hover:bg-white/10"
+          className="inline-flex self-start items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs text-white/70 hover:bg-white/10"
         >
           <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
             <path d="M14.7 5.3 9 11l5.7 5.7-1.4 1.4L6.2 11l7.1-7.1 1.4 1.4z" />
@@ -190,19 +190,18 @@ export default function AudioDetail() {
             </div>
           </div>
 
-          <audio
-            ref={audioRef}
-            src={audioSrc}
-            controls
-            preload="metadata"
-            onPlay={handlePlay}
-            onPause={handlePause}
-            onEnded={handlePause}
-            onLoadedMetadata={(event) => {
-              setDuration(event.currentTarget.duration || 0);
-            }}
-            className="w-full"
-          />
+        <audio
+          ref={audioRef}
+          src={audioSrc}
+          preload="metadata"
+          onPlay={handlePlay}
+          onPause={handlePause}
+          onEnded={handlePause}
+          onLoadedMetadata={(event) => {
+            setDuration(event.currentTarget.duration || 0);
+          }}
+          className="hidden"
+        />
         </div>
       </div>
     </div>

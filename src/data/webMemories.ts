@@ -8,22 +8,19 @@ export const webMemories: WebMemory[] = [
   {
     slug: "Loinhanchoem",
     title: "Lời nhắn cho em",
-    subtitle: "Lời nhắn gửi riêng"
+    subtitle: "(Mật Khẩu: LANANH)"
   },
   {
     slug: "20th11",
-    title: "20/11",
-    subtitle: "Một ngày đặc biệt"
+    title: "20/11"
   },
   {
     slug: "Caythong",
-    title: "Cây thông",
-    subtitle: "Khoảnh khắc ấm áp"
+    title: "Cây thông"
   },
   {
     slug: "Emdungkhoc",
-    title: "Em đừng khóc",
-    subtitle: "Gửi lời an ủi"
+    title: "Em đừng khóc"
   }
 ];
 
