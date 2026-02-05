@@ -43,6 +43,29 @@ export const onRequest: PagesFunction<Env> = async ({ request, env, params }) =>
     return json(row);
   }
 
+  if (request.method === "DELETE") {
+    const row = await env.DB.prepare(
+      "SELECT audio_key, thumb_key FROM audios WHERE id = ?"
+    )
+      .bind(id)
+      .first<{ audio_key: string | null; thumb_key: string | null }>();
+
+    if (!row) return errorJson(404, "Not found.");
+
+    const deletions: Promise<unknown>[] = [];
+    if (row.audio_key) deletions.push(env.R2_VIDEOS.delete(row.audio_key));
+    if (row.thumb_key) deletions.push(env.R2_VIDEOS.delete(row.thumb_key));
+    if (deletions.length > 0) {
+      await Promise.all(deletions);
+    }
+
+    await env.DB.prepare("DELETE FROM audios WHERE id = ?")
+      .bind(id)
+      .run();
+
+    return json({ ok: true });
+  }
+
   if (request.method !== "PUT") {
     return new Response(null, { status: 405 });
   }

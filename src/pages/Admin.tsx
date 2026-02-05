@@ -1040,6 +1040,87 @@ export default function Admin() {
     }
   };
 
+  const handleDeleteVideo = async (video: AdminVideo) => {
+    if (!window.confirm(`Xóa video "${video.title}"?`)) return;
+    setError(null);
+    setLoading(true);
+    try {
+      await apiFetchVoid("/api/admin/videos/delete", {
+        method: "POST",
+        body: JSON.stringify({ id: video.id })
+      });
+      if (editingId === video.id) {
+        setEditingId(null);
+        setEditingSlug(null);
+        setEditingThumbKey(null);
+      }
+      await loadVideos();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Delete failed.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteAudio = async (audio: AdminAudio) => {
+    if (!window.confirm(`Xóa âm thanh "${audio.title}"?`)) return;
+    setError(null);
+    setAudioLoading(true);
+    try {
+      await apiFetchVoid(`/api/admin/audios/${audio.id}`, {
+        method: "DELETE"
+      });
+      if (editingAudioId === audio.id) {
+        setEditingAudioId(null);
+      }
+      await loadAudios();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Delete failed.");
+    } finally {
+      setAudioLoading(false);
+    }
+  };
+
+  const handleDeleteImage = async (image: AdminImage) => {
+    if (!window.confirm(`Xóa hình ảnh "${image.title}"?`)) return;
+    setError(null);
+    setImageLoading(true);
+    try {
+      await apiFetchVoid(`/api/admin/images/${image.id}`, {
+        method: "DELETE"
+      });
+      if (editingImageId === image.id) {
+        setEditingImageId(null);
+        setEditingImageKey(null);
+        setEditingImageThumbKey(null);
+      }
+      await loadImages();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Delete failed.");
+    } finally {
+      setImageLoading(false);
+    }
+  };
+
+  const handleDeleteNote = async (note: AdminNote) => {
+    if (!window.confirm(`Xóa ghi chú "${note.title}"?`)) return;
+    setError(null);
+    setNoteLoading(true);
+    try {
+      await apiFetchVoid(`/api/admin/notes/${note.id}`, {
+        method: "DELETE"
+      });
+      if (editingNoteId === note.id) {
+        setEditingNoteId(null);
+      }
+      await loadNotes();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Delete failed.");
+    } finally {
+      setNoteLoading(false);
+    }
+  };
+
   if (authState === "checking") {
     return (
       <Loading
@@ -1287,12 +1368,20 @@ export default function Admin() {
                     <div className="text-xs text-white/40">{video.slug}</div>
                   </div>
                 </div>
-                <button
-                  onClick={() => handleEdit(video.id)}
-                  className="px-3 py-1.5 rounded-lg bg-white/10 text-xs text-white/80 hover:bg-white/20"
-                >
-                  Edit
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => handleEdit(video.id)}
+                    className="px-3 py-1.5 rounded-lg bg-white/10 text-xs text-white/80 hover:bg-white/20"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => handleDeleteVideo(video)}
+                    className="px-3 py-1.5 rounded-lg bg-red-500/10 text-xs text-red-200 hover:bg-red-500/20"
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
             ))}
             {videos.length === 0 && !loading ? (
@@ -1465,12 +1554,20 @@ export default function Admin() {
                     ) : null}
                   </div>
                 </div>
-                <button
-                  onClick={() => handleEditAudio(audio.id)}
-                  className="px-3 py-1.5 rounded-lg bg-white/10 text-xs text-white/80 hover:bg-white/20"
-                >
-                  Edit
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => handleEditAudio(audio.id)}
+                    className="px-3 py-1.5 rounded-lg bg-white/10 text-xs text-white/80 hover:bg-white/20"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => handleDeleteAudio(audio)}
+                    className="px-3 py-1.5 rounded-lg bg-red-500/10 text-xs text-red-200 hover:bg-red-500/20"
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
             ))}
             {audios.length === 0 && !audioLoading ? (
@@ -1650,12 +1747,20 @@ export default function Admin() {
                     ) : null}
                   </div>
                 </div>
-                <button
-                  onClick={() => handleEditImage(image.id)}
-                  className="px-3 py-1.5 rounded-lg bg-white/10 text-xs text-white/80 hover:bg-white/20"
-                >
-                  Edit
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => handleEditImage(image.id)}
+                    className="px-3 py-1.5 rounded-lg bg-white/10 text-xs text-white/80 hover:bg-white/20"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => handleDeleteImage(image)}
+                    className="px-3 py-1.5 rounded-lg bg-red-500/10 text-xs text-red-200 hover:bg-red-500/20"
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
             ))}
             {images.length === 0 && !imageLoading ? (
@@ -1752,12 +1857,20 @@ export default function Admin() {
                     {note.content}
                   </div>
                 </div>
-                <button
-                  onClick={() => handleEditNote(note.id)}
-                  className="px-3 py-1.5 rounded-lg bg-white/10 text-xs text-white/80 hover:bg-white/20"
-                >
-                  Edit
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => handleEditNote(note.id)}
+                    className="px-3 py-1.5 rounded-lg bg-white/10 text-xs text-white/80 hover:bg-white/20"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => handleDeleteNote(note)}
+                    className="px-3 py-1.5 rounded-lg bg-red-500/10 text-xs text-red-200 hover:bg-red-500/20"
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
             ))}
             {notes.length === 0 && !noteLoading ? (

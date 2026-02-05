@@ -22,6 +22,21 @@ export const onRequest: PagesFunction<Env> = async ({ request, env, params }) =>
     return json(row);
   }
 
+  if (request.method === "DELETE") {
+    const row = await env.DB.prepare(
+      "SELECT id FROM notes WHERE id = ?"
+    )
+      .bind(id)
+      .first();
+    if (!row) return errorJson(404, "Not found.");
+
+    await env.DB.prepare("DELETE FROM notes WHERE id = ?")
+      .bind(id)
+      .run();
+
+    return json({ ok: true });
+  }
+
   if (request.method !== "PUT") {
     return new Response(null, { status: 405 });
   }
