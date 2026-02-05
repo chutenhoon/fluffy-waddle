@@ -1,25 +1,81 @@
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { apiFetch } from "../api/client";
 import Loading from "../components/Loading";
 
-type ImageDetail = {
+type AlbumImage = {
   id: string;
-  title: string;
-  description?: string | null;
   image_key: string;
   thumb_key?: string | null;
-  created_at: string;
+  sort_order?: number | null;
 };
+
+type ImageDetail =
+  | {
+      type: "single";
+      id: string;
+      title: string;
+      description?: string | null;
+      image_key: string;
+      thumb_key?: string | null;
+      created_at: string;
+    }
+  | {
+      type: "album";
+      id: string;
+      title: string;
+      description?: string | null;
+      created_at: string;
+      images: AlbumImage[];
+      count?: number;
+      active_image_id?: string;
+    };
 
 export default function ImageDetail() {
   const { id } = useParams();
+  const itemRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const [activeIndex, setActiveIndex] = useState(0);
 
   const { data, isLoading } = useQuery({
     queryKey: ["image", id],
     queryFn: () => apiFetch<ImageDetail>(`/api/images/${id}`),
     enabled: Boolean(id)
   });
+
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [data?.id]);
+
+  useEffect(() => {
+    if (!data || data.type !== "album") return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            const idx = Number(entry.target.getAttribute("data-index") || 0);
+            setActiveIndex(idx);
+          }
+        });
+      },
+      { threshold: 0.6 }
+    );
+    itemRefs.current.forEach((el) => {
+      if (el) observer.observe(el);
+    });
+    return () => observer.disconnect();
+  }, [data]);
+
+  useEffect(() => {
+    if (!data || data.type !== "album" || !data.active_image_id) return;
+    const idx = data.images.findIndex(
+      (img) => img.id === data.active_image_id
+    );
+    if (idx >= 0) {
+      itemRefs.current[idx]?.scrollIntoView({ block: "start" });
+      setActiveIndex(idx);
+    }
+  }, [data]);
 
   if (isLoading) {
     return (
@@ -36,7 +92,7 @@ export default function ImageDetail() {
 
   return (
     <div className="min-h-screen px-5 py-8 md:px-10">
-      <div className="max-w-[1000px] mx-auto space-y-6">
+      <div className="max-w-[1100px] mx-auto space-y-6">
         <Link
           to="/images"
           className="inline-flex self-start items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs text-white/70 hover:bg-white/10"
@@ -47,22 +103,94 @@ export default function ImageDetail() {
           Quay lại hình ảnh
         </Link>
 
-        <div className="glass-panel p-5 md:p-6 space-y-4">
-          <div>
-            <h1 className="text-2xl font-medium text-white">{data.title}</h1>
-            {data.description ? (
-              <p className="text-sm text-white/50 mt-1">{data.description}</p>
-            ) : null}
-          </div>
+        {data.type === "single" ? (
+          <div className="glass-panel p-5 md:p-6 space-y-4">
+            <div>
+              <h1 className="text-2xl font-medium text-white">{data.title}</h1>
+              {data.description ? (
+                <p className="text-sm text-white/50 mt-1">
+                  {data.description}
+                </p>
+              ) : null}
+            </div>
 
-          <div className="rounded-2xl overflow-hidden border border-white/10 bg-black/30 flex items-center justify-center p-3 md:p-4">
-            <img
-              src={`/media/${data.image_key}`}
-              alt={data.title}
-              className="max-h-[70vh] w-auto max-w-full object-contain"
-            />
+            <div className="rounded-2xl overflow-hidden border border-white/10 bg-black/30 flex items-center justify-center p-3 md:p-4">
+              <img
+                src={`/media/${data.image_key}`}
+                alt={data.title}
+                className="max-h-[75vh] w-auto max-w-full object-contain"
+              />
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="glass-panel p-5 md:p-6 space-y-3">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <h1 className="text-2xl font-medium text-white">
+                    {data.title}
+                  </h1>
+                  {data.description ? (
+                    <p className="text-sm text-white/50 mt-1">
+                      {data.description}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="flex items-center gap-3 text-xs text-white/60">
+                  <div>
+                    {Math.min(activeIndex + 1, data.images.length || 1)}/
+                    {data.images.length || 1}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = Math.max(0, activeIndex - 1);
+                      itemRefs.current[next]?.scrollIntoView({ block: "start" });
+                    }}
+                    className="h-8 w-8 rounded-full bg-white/10 text-white/80 hover:bg-white/20"
+                    aria-label="Previous image"
+                  >
+                    ‹
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = Math.min(
+                        data.images.length - 1,
+                        activeIndex + 1
+                      );
+                      itemRefs.current[next]?.scrollIntoView({ block: "start" });
+                    }}
+                    className="h-8 w-8 rounded-full bg-white/10 text-white/80 hover:bg-white/20"
+                    aria-label="Next image"
+                  >
+                    ›
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div id="album-scroll" className="space-y-6">
+              {data.images.map((image, index) => (
+                <div
+                  key={image.id}
+                  ref={(el) => {
+                    itemRefs.current[index] = el;
+                  }}
+                  data-index={index}
+                  className="rounded-2xl overflow-hidden border border-white/10 bg-black/30 p-3 md:p-4 scroll-mt-24"
+                >
+                  <img
+                    src={`/media/${image.image_key}`}
+                    alt={`${data.title} ${index + 1}`}
+                    loading="lazy"
+                    className="w-full max-h-[75vh] object-contain"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

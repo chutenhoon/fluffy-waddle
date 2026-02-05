@@ -6,6 +6,7 @@ import AudioCard from "../components/AudioCard";
 import ImageCard, { ImageItem } from "../components/ImageCard";
 import Loading from "../components/Loading";
 import NoteCard, { NoteItem } from "../components/NoteCard";
+import ShortCard, { ShortItem } from "../components/ShortCard";
 import VideoCard, { VideoItem } from "../components/VideoCard";
 import WebCard from "../components/WebCard";
 import { useSearch } from "../contexts/SearchContext";
@@ -50,6 +51,11 @@ export default function Home() {
     queryFn: () => apiFetch<VideoItem[]>("/api/videos")
   });
 
+  const { data: shorts, isLoading: shortsLoading } = useQuery({
+    queryKey: ["shorts"],
+    queryFn: () => apiFetch<ShortItem[]>("/api/shorts")
+  });
+
   const { data: audios, isLoading: audiosLoading } = useQuery({
     queryKey: ["audios"],
     queryFn: () => apiFetch<AudioItem[]>("/api/audio")
@@ -85,6 +91,14 @@ export default function Home() {
     );
   }, [videos, needle]);
 
+  const filteredShorts = useMemo(() => {
+    if (!shorts) return [];
+    if (!needle) return shorts;
+    return shorts.filter((short) =>
+      short.title.toLowerCase().includes(needle)
+    );
+  }, [shorts, needle]);
+
   const filteredImages = useMemo(() => {
     if (!images) return [];
     if (!needle) return images;
@@ -115,9 +129,9 @@ export default function Home() {
   }, [needle]);
 
   const anyLoading =
-    videosLoading || audiosLoading || imagesLoading || notesLoading;
+    videosLoading || shortsLoading || audiosLoading || imagesLoading || notesLoading;
 
-  if (anyLoading && !videos && !audios && !images && !notes) {
+  if (anyLoading && !videos && !shorts && !audios && !images && !notes) {
     return (
       <Loading
         title="Đợi xíu nha"
@@ -126,8 +140,11 @@ export default function Home() {
     );
   }
 
+  const hasVideoContent =
+    filteredVideos.length > 0 || filteredShorts.length > 0;
+
   const sections = [
-    filteredVideos.length > 0,
+    hasVideoContent,
     filteredImages.length > 0,
     filteredAudios.length > 0,
     filteredWeb.length > 0,
@@ -139,23 +156,43 @@ export default function Home() {
   return (
     <div className="min-h-screen px-5 py-8 md:px-10">
       <div className="max-w-[1400px] mx-auto space-y-10">
-        {filteredVideos.length > 0 ? (
+        {hasVideoContent ? (
           <section className="space-y-4">
             <SectionHeader title="Video" to="/videos" action="Xem riêng" />
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredVideos.map((video) => (
-                <VideoCard key={video.id} video={video} />
-              ))}
-            </div>
+            {filteredVideos.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredVideos.map((video) => (
+                  <VideoCard key={video.id} video={video} />
+                ))}
+              </div>
+            ) : null}
+
+            {filteredShorts.length > 0 ? (
+              <div className="space-y-3">
+                <div className="text-xs uppercase tracking-[0.4em] text-white/35">
+                  Shorts
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+                  {filteredShorts.map((short) => (
+                    <ShortCard key={short.id} short={short} />
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </section>
         ) : null}
 
         {filteredImages.length > 0 ? (
           <section className="space-y-4">
             <SectionHeader title="Hình ảnh" to="/images" action="Xem riêng" />
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="flex gap-4 overflow-x-auto pb-2 snap-x snap-mandatory">
               {filteredImages.map((image) => (
-                <ImageCard key={image.id} image={image} />
+                <div
+                  key={image.id}
+                  className="min-w-[200px] sm:min-w-[220px] lg:min-w-[240px] snap-start"
+                >
+                  <ImageCard image={image} />
+                </div>
               ))}
             </div>
           </section>
@@ -175,7 +212,7 @@ export default function Home() {
         {filteredWeb.length > 0 ? (
           <section className="space-y-4">
             <SectionHeader title="Web" to="/web" action="Xem riêng" />
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {filteredWeb.map((memory) => (
                 <WebCard key={memory.slug} memory={memory} />
               ))}

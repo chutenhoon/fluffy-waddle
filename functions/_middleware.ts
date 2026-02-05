@@ -5,6 +5,7 @@ import { errorJson } from "./_lib/response";
 const PUBLIC_PATHS = new Set(["/login", "/api/auth/login"]);
 const PUBLIC_PREFIXES = ["/assets/", "/favicon", "/robots", "/manifest"];
 const HLS_PATH_RE = /^\/api\/videos\/([^/]+)\/hls\/(.+)$/;
+const SHORTS_HLS_PATH_RE = /^\/api\/shorts\/([^/]+)\/hls\/(.+)$/;
 const MEDIA_PATH_RE = /^\/media\/(.+)$/;
 
 const MEDIA_CONTENT_TYPES: Record<string, string> = {
@@ -61,6 +62,7 @@ export const onRequest: PagesFunction<Env> = async ({ request, env, next }) => {
   }
 
   const hlsMatch = HLS_PATH_RE.exec(pathname);
+  const shortsHlsMatch = SHORTS_HLS_PATH_RE.exec(pathname);
   const mediaMatch = MEDIA_PATH_RE.exec(pathname);
 
   if (PUBLIC_PATHS.has(pathname)) {
@@ -90,6 +92,54 @@ export const onRequest: PagesFunction<Env> = async ({ request, env, next }) => {
 
         const row = await env.DB.prepare(
           "SELECT hls_master_key FROM videos WHERE slug = ? AND status = ?"
+        )
+          .bind(slug, "ready")
+          .first<{ hls_master_key: string | null }>();
+
+        if (!row?.hls_master_key) {
+          return errorJson(404, "Not found.");
+        }
+
+        const prefix = prefixFromKey(row.hls_master_key);
+        if (!prefix) {
+          return errorJson(404, "Not found.");
+        }
+
+        const objectKey = `${prefix}${relPath}`;
+        const object = await env.R2_VIDEOS.get(objectKey);
+        if (!object) return errorJson(404, "Not found.");
+
+        const headers = new Headers();
+        headers.set(
+          "Content-Type",
+          object.httpMetadata?.contentType || contentTypeForKey(objectKey)
+        );
+        headers.set("Cache-Control", "public, max-age=3600");
+        if (object.size) {
+          headers.set("Content-Length", object.size.toString());
+        }
+
+        return new Response(object.body, {
+          status: 200,
+          headers
+        });
+      }
+
+      if (shortsHlsMatch) {
+        const slug = shortsHlsMatch[1];
+        let relPath = shortsHlsMatch[2] || "";
+        try {
+          relPath = decodeURIComponent(relPath);
+        } catch {
+          // Keep raw path if decoding fails.
+        }
+        relPath = normalizePath(relPath);
+        if (!isSafePath(relPath)) {
+          return errorJson(400, "Invalid path.");
+        }
+
+        const row = await env.DB.prepare(
+          "SELECT hls_master_key FROM shorts WHERE slug = ? AND status = ?"
         )
           .bind(slug, "ready")
           .first<{ hls_master_key: string | null }>();

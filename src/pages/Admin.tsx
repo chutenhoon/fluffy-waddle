@@ -20,6 +20,23 @@ type AdminVideoDetail = AdminVideo & {
   thumb_key?: string | null;
 };
 
+type AdminShort = {
+  id: string;
+  slug: string;
+  title: string;
+  thumb_key?: string | null;
+  created_at: string;
+  updated_at: string;
+  status: string;
+};
+
+type AdminShortDetail = AdminShort & {
+  description?: string | null;
+  pc_key?: string | null;
+  hls_master_key?: string | null;
+  thumb_key?: string | null;
+};
+
 type AdminAudio = {
   id: string;
   title: string;
@@ -39,6 +56,31 @@ type AdminImage = {
   thumb_key?: string | null;
   created_at: string;
   updated_at: string;
+};
+
+type AdminAlbum = {
+  id: string;
+  title: string;
+  description?: string | null;
+  cover_key?: string | null;
+  cover_thumb_key?: string | null;
+  count?: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type AdminAlbumDetail = {
+  id: string;
+  title: string;
+  description?: string | null;
+  created_at: string;
+  updated_at: string;
+  images: Array<{
+    id: string;
+    image_key: string;
+    thumb_key?: string | null;
+    sort_order?: number | null;
+  }>;
 };
 
 type AdminNote = {
@@ -274,6 +316,7 @@ function audioContentType(file: File, ext: string) {
 
 async function requestPresign(params: {
   videoId?: string;
+  shortId?: string;
   audioId?: string;
   imageId?: string;
   path: string;
@@ -286,7 +329,7 @@ async function requestPresign(params: {
 }
 
 async function uploadToR2(
-  target: { videoId?: string; audioId?: string; imageId?: string },
+  target: { videoId?: string; shortId?: string; audioId?: string; imageId?: string },
   path: string,
   body: Blob | Uint8Array | File,
   contentType: string
@@ -340,10 +383,14 @@ export default function Admin() {
   const [error, setError] = useState<string | null>(null);
   const [videos, setVideos] = useState<AdminVideo[]>([]);
   const [loading, setLoading] = useState(false);
+  const [shorts, setShorts] = useState<AdminShort[]>([]);
+  const [shortsLoading, setShortsLoading] = useState(false);
   const [audios, setAudios] = useState<AdminAudio[]>([]);
   const [audioLoading, setAudioLoading] = useState(false);
   const [images, setImages] = useState<AdminImage[]>([]);
   const [imageLoading, setImageLoading] = useState(false);
+  const [albums, setAlbums] = useState<AdminAlbum[]>([]);
+  const [albumLoading, setAlbumLoading] = useState(false);
   const [notes, setNotes] = useState<AdminNote[]>([]);
   const [noteLoading, setNoteLoading] = useState(false);
 
@@ -355,6 +402,13 @@ export default function Admin() {
   const [creating, setCreating] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
 
+  const [shortTitle, setShortTitle] = useState("");
+  const [shortDescription, setShortDescription] = useState("");
+  const [shortMp4File, setShortMp4File] = useState<File | null>(null);
+  const [shortThumbFile, setShortThumbFile] = useState<File | null>(null);
+  const [shortHlsFile, setShortHlsFile] = useState<File | null>(null);
+  const [creatingShort, setCreatingShort] = useState(false);
+
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingSlug, setEditingSlug] = useState<string | null>(null);
   const [editingThumbKey, setEditingThumbKey] = useState<string | null>(null);
@@ -364,6 +418,16 @@ export default function Admin() {
   const [editThumb, setEditThumb] = useState<File | null>(null);
   const [editHls, setEditHls] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
+
+  const [editingShortId, setEditingShortId] = useState<string | null>(null);
+  const [editingShortSlug, setEditingShortSlug] = useState<string | null>(null);
+  const [editingShortThumbKey, setEditingShortThumbKey] = useState<string | null>(null);
+  const [editShortTitle, setEditShortTitle] = useState("");
+  const [editShortDescription, setEditShortDescription] = useState("");
+  const [editShortMp4, setEditShortMp4] = useState<File | null>(null);
+  const [editShortThumb, setEditShortThumb] = useState<File | null>(null);
+  const [editShortHls, setEditShortHls] = useState<File | null>(null);
+  const [savingShort, setSavingShort] = useState(false);
 
   const [audioTitle, setAudioTitle] = useState("");
   const [audioNote, setAudioNote] = useState(false);
@@ -376,6 +440,15 @@ export default function Admin() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imageThumb, setImageThumb] = useState<File | null>(null);
   const [creatingImage, setCreatingImage] = useState(false);
+
+  const [albumTitle, setAlbumTitle] = useState("");
+  const [albumDescription, setAlbumDescription] = useState("");
+  const [albumFiles, setAlbumFiles] = useState<File[]>([]);
+  const [creatingAlbum, setCreatingAlbum] = useState(false);
+  const [editingAlbumId, setEditingAlbumId] = useState<string | null>(null);
+  const [editAlbumTitle, setEditAlbumTitle] = useState("");
+  const [editAlbumDescription, setEditAlbumDescription] = useState("");
+  const [savingAlbum, setSavingAlbum] = useState(false);
 
   const [noteTitle, setNoteTitle] = useState("");
   const [noteContent, setNoteContent] = useState("");
@@ -409,8 +482,10 @@ export default function Admin() {
       const data = await apiFetch<AdminVideo[]>("/api/admin/videos");
       setVideos(data || []);
       setAuthState("authed");
+      await loadShorts();
       await loadAudios();
       await loadImages();
+      await loadAlbums();
       await loadNotes();
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
@@ -421,6 +496,18 @@ export default function Admin() {
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadShorts = async () => {
+    setShortsLoading(true);
+    try {
+      const data = await apiFetch<AdminShort[]>("/api/admin/shorts");
+      setShorts(data || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load shorts.");
+    } finally {
+      setShortsLoading(false);
     }
   };
 
@@ -445,6 +532,18 @@ export default function Admin() {
       setError(err instanceof Error ? err.message : "Failed to load images.");
     } finally {
       setImageLoading(false);
+    }
+  };
+
+  const loadAlbums = async () => {
+    setAlbumLoading(true);
+    try {
+      const data = await apiFetch<AdminAlbum[]>("/api/admin/albums");
+      setAlbums(data || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load albums.");
+    } finally {
+      setAlbumLoading(false);
     }
   };
 
@@ -485,8 +584,10 @@ export default function Admin() {
     await apiFetchVoid("/api/admin/logout", { method: "POST" });
     setAuthState("guest");
     setVideos([]);
+    setShorts([]);
     setAudios([]);
     setImages([]);
+    setAlbums([]);
     setNotes([]);
   };
 
@@ -584,6 +685,226 @@ export default function Admin() {
     } finally {
       setCreating(false);
       setUploadStatus(null);
+    }
+  };
+
+  const handleCreateShort = async (event: FormEvent) => {
+    event.preventDefault();
+    const cleanedTitle = shortTitle.trim();
+    if (!cleanedTitle || !shortMp4File || !shortHlsFile) {
+      setError("Title, MP4, and HLS ZIP are required.");
+      return;
+    }
+
+    setCreatingShort(true);
+    setError(null);
+    setUploadStatus(null);
+
+    try {
+      const shortId = crypto.randomUUID();
+
+      setUploadStatus("Uploading MP4...");
+      const pcContentType = shortMp4File.type || "video/mp4";
+      const pcKey = await uploadToR2(
+        { shortId },
+        "pc.mp4",
+        shortMp4File,
+        pcContentType
+      );
+
+      let thumbKey: string | null = null;
+      if (shortThumbFile) {
+        const ext = thumbExtension(shortThumbFile);
+        const thumbType = thumbContentType(shortThumbFile, ext);
+        setUploadStatus("Uploading thumbnail...");
+        thumbKey = await uploadToR2(
+          { shortId },
+          `thumb.${ext}`,
+          shortThumbFile,
+          thumbType
+        );
+      } else {
+        setUploadStatus("Generating thumbnail...");
+        const autoThumb = await generateThumbnailFromVideo(shortMp4File);
+        setUploadStatus("Uploading thumbnail...");
+        thumbKey = await uploadToR2(
+          { shortId },
+          "thumb.jpg",
+          autoThumb,
+          "image/jpeg"
+        );
+      }
+
+      setUploadStatus("Extracting HLS ZIP...");
+      const extracted = extractHlsEntries(await unzipFile(shortHlsFile));
+      setUploadStatus(`Uploading HLS 0/${extracted.length} files`);
+      await runWithConcurrency(
+        extracted,
+        HLS_CONCURRENCY,
+        async (entry) => {
+          const blob = new Blob([entry.data], { type: entry.contentType });
+          await uploadToR2(
+            { shortId },
+            `hls/${entry.path}`,
+            blob,
+            entry.contentType
+          );
+        },
+        (done, total) => {
+          setUploadStatus(`Uploading HLS ${done}/${total} files`);
+        }
+      );
+
+      const payload = {
+        id: shortId,
+        title: cleanedTitle,
+        description: shortDescription.trim() || null,
+        pc_key: pcKey,
+        thumb_key: thumbKey || undefined,
+        hls_master_key: `shorts/${shortId}/hls/index.m3u8`,
+        size_bytes: shortMp4File.size
+      };
+
+      setUploadStatus("Saving metadata...");
+      await apiFetchVoid("/api/admin/shorts", {
+        method: "POST",
+        body: JSON.stringify(payload)
+      });
+
+      setShortTitle("");
+      setShortDescription("");
+      setShortMp4File(null);
+      setShortThumbFile(null);
+      setShortHlsFile(null);
+      await loadShorts();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed.");
+    } finally {
+      setCreatingShort(false);
+      setUploadStatus(null);
+    }
+  };
+
+  const handleEditShort = async (id: string) => {
+    setError(null);
+    setEditingShortId(id);
+    setSavingShort(true);
+    try {
+      const data = await apiFetch<AdminShortDetail>(`/api/admin/shorts/${id}`);
+      setEditShortTitle(data.title);
+      setEditShortDescription(data.description || "");
+      setEditingShortSlug(data.slug);
+      setEditingShortThumbKey(data.thumb_key || null);
+      setEditShortMp4(null);
+      setEditShortThumb(null);
+      setEditShortHls(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load.");
+      setEditingShortId(null);
+      setEditingShortSlug(null);
+      setEditingShortThumbKey(null);
+    } finally {
+      setSavingShort(false);
+    }
+  };
+
+  const handleSaveShort = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!editingShortId) return;
+
+    setSavingShort(true);
+    setError(null);
+    setUploadStatus(null);
+    try {
+      const payload: Record<string, unknown> = {
+        title: editShortTitle.trim(),
+        description: editShortDescription.trim()
+      };
+
+      if (editShortMp4) {
+        setUploadStatus("Uploading MP4...");
+        const pcContentType = editShortMp4.type || "video/mp4";
+        const pcKey = await uploadToR2(
+          { shortId: editingShortId },
+          "pc.mp4",
+          editShortMp4,
+          pcContentType
+        );
+        payload.pc_key = pcKey;
+        payload.size_bytes = editShortMp4.size;
+      }
+
+      if (editShortThumb) {
+        const ext = thumbExtension(editShortThumb);
+        const thumbType = thumbContentType(editShortThumb, ext);
+        setUploadStatus("Uploading thumbnail...");
+        const thumbKey = await uploadToR2(
+          { shortId: editingShortId },
+          `thumb.${ext}`,
+          editShortThumb,
+          thumbType
+        );
+        payload.thumb_key = thumbKey;
+      }
+
+      if (editShortHls) {
+        setUploadStatus("Extracting HLS ZIP...");
+        const extracted = extractHlsEntries(await unzipFile(editShortHls));
+        setUploadStatus(`Uploading HLS 0/${extracted.length} files`);
+        await runWithConcurrency(
+          extracted,
+          HLS_CONCURRENCY,
+          async (entry) => {
+            const blob = new Blob([entry.data], { type: entry.contentType });
+            await uploadToR2(
+              { shortId: editingShortId },
+              `hls/${entry.path}`,
+              blob,
+              entry.contentType
+            );
+          },
+          (done, total) => {
+            setUploadStatus(`Uploading HLS ${done}/${total} files`);
+          }
+        );
+        payload.hls_master_key = `shorts/${editingShortId}/hls/index.m3u8`;
+      }
+
+      await apiFetchVoid(`/api/admin/shorts/${editingShortId}`, {
+        method: "PUT",
+        body: JSON.stringify(payload)
+      });
+
+      setEditingShortId(null);
+      setEditingShortSlug(null);
+      setEditingShortThumbKey(null);
+      await loadShorts();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Update failed.");
+    } finally {
+      setSavingShort(false);
+      setUploadStatus(null);
+    }
+  };
+
+  const handleDeleteShort = async (short: AdminShort) => {
+    if (!window.confirm(`Xóa short "${short.title}"?`)) return;
+    setError(null);
+    setShortsLoading(true);
+    try {
+      await apiFetchVoid(`/api/admin/shorts/${short.id}`, {
+        method: "DELETE"
+      });
+      if (editingShortId === short.id) {
+        setEditingShortId(null);
+        setEditingShortSlug(null);
+        setEditingShortThumbKey(null);
+      }
+      await loadShorts();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Delete failed.");
+    } finally {
+      setShortsLoading(false);
     }
   };
 
@@ -964,6 +1285,130 @@ export default function Admin() {
     } finally {
       setSavingImage(false);
       setUploadStatus(null);
+    }
+  };
+
+  const handleCreateAlbum = async (event: FormEvent) => {
+    event.preventDefault();
+    const cleanedTitle = albumTitle.trim();
+    if (!cleanedTitle || albumFiles.length === 0) {
+      setError("Album title and images are required.");
+      return;
+    }
+
+    setCreatingAlbum(true);
+    setError(null);
+    setUploadStatus(null);
+
+    try {
+      const albumId = crypto.randomUUID();
+      const items: Array<{
+        id: string;
+        image_key: string;
+        thumb_key?: string | null;
+        sort_order: number;
+      }> = [];
+
+      for (let i = 0; i < albumFiles.length; i += 1) {
+        const file = albumFiles[i];
+        const imageId = crypto.randomUUID();
+        const ext = thumbExtension(file);
+        const imageType = thumbContentType(file, ext);
+        setUploadStatus(`Uploading image ${i + 1}/${albumFiles.length}...`);
+        const imageKey = await uploadToR2(
+          { imageId },
+          `image.${ext}`,
+          file,
+          imageType
+        );
+        items.push({
+          id: imageId,
+          image_key: imageKey,
+          thumb_key: null,
+          sort_order: i
+        });
+      }
+
+      setUploadStatus("Saving album...");
+      await apiFetchVoid("/api/admin/albums", {
+        method: "POST",
+        body: JSON.stringify({
+          id: albumId,
+          title: cleanedTitle,
+          description: albumDescription.trim() || null,
+          items
+        })
+      });
+
+      setAlbumTitle("");
+      setAlbumDescription("");
+      setAlbumFiles([]);
+      await loadAlbums();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed.");
+    } finally {
+      setCreatingAlbum(false);
+      setUploadStatus(null);
+    }
+  };
+
+  const handleEditAlbum = async (id: string) => {
+    setError(null);
+    setEditingAlbumId(id);
+    setSavingAlbum(true);
+    try {
+      const data = await apiFetch<AdminAlbumDetail>(`/api/admin/albums/${id}`);
+      setEditAlbumTitle(data.title);
+      setEditAlbumDescription(data.description || "");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load.");
+      setEditingAlbumId(null);
+    } finally {
+      setSavingAlbum(false);
+    }
+  };
+
+  const handleSaveAlbum = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!editingAlbumId) return;
+
+    setSavingAlbum(true);
+    setError(null);
+
+    try {
+      await apiFetchVoid(`/api/admin/albums/${editingAlbumId}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          title: editAlbumTitle.trim(),
+          description: editAlbumDescription.trim() || null
+        })
+      });
+
+      setEditingAlbumId(null);
+      await loadAlbums();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Update failed.");
+    } finally {
+      setSavingAlbum(false);
+    }
+  };
+
+  const handleDeleteAlbum = async (album: AdminAlbum) => {
+    if (!window.confirm(`Xóa album "${album.title}"?`)) return;
+    setError(null);
+    setAlbumLoading(true);
+    try {
+      await apiFetchVoid(`/api/admin/albums/${album.id}`, {
+        method: "DELETE"
+      });
+      if (editingAlbumId === album.id) {
+        setEditingAlbumId(null);
+      }
+      await loadAlbums();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Delete failed.");
+    } finally {
+      setAlbumLoading(false);
     }
   };
 
@@ -1391,6 +1836,218 @@ export default function Admin() {
         </div>
 
         <div className="glass-panel p-6 space-y-4">
+          <div className="text-sm text-white/70">Create new short</div>
+          <form onSubmit={handleCreateShort} className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <input
+                type="text"
+                value={shortTitle}
+                onChange={(event) => setShortTitle(event.target.value)}
+                placeholder="Title"
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white/90 focus:outline-none focus:ring-1 focus:ring-white/20"
+                required
+              />
+              <input
+                type="text"
+                value={shortDescription}
+                onChange={(event) => setShortDescription(event.target.value)}
+                placeholder="Description (optional)"
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white/90 focus:outline-none focus:ring-1 focus:ring-white/20"
+              />
+            </div>
+            <div className="grid gap-3 md:grid-cols-3">
+              <label className="text-xs text-white/50 space-y-1">
+                <span>Short MP4 (required)</span>
+                <input
+                  type="file"
+                  accept="video/*"
+                  onChange={(event) =>
+                    setShortMp4File(event.target.files?.[0] || null)
+                  }
+                  className="w-full text-sm text-white/70"
+                  required
+                />
+              </label>
+              <label className="text-xs text-white/50 space-y-1">
+                <span>Thumbnail (optional)</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(event) =>
+                    setShortThumbFile(event.target.files?.[0] || null)
+                  }
+                  className="w-full text-sm text-white/70"
+                />
+              </label>
+              <label className="text-xs text-white/50 space-y-1">
+                <span>HLS ZIP (required)</span>
+                <input
+                  type="file"
+                  accept=".zip"
+                  onChange={(event) =>
+                    setShortHlsFile(event.target.files?.[0] || null)
+                  }
+                  className="w-full text-sm text-white/70"
+                  required
+                />
+              </label>
+            </div>
+            <button
+              type="submit"
+              disabled={creatingShort}
+              className="px-4 py-2 rounded-xl bg-white/10 text-sm text-white/90 disabled:opacity-50"
+            >
+              {creatingShort ? "Uploading..." : "Create short"}
+            </button>
+            {creatingShort && uploadStatus ? (
+              <div className="text-xs text-white/50">{uploadStatus}</div>
+            ) : null}
+          </form>
+        </div>
+
+        {editingShortId ? (
+          <div className="glass-panel p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-white/70">Edit short</div>
+              <button
+                onClick={() => {
+                  setEditingShortId(null);
+                  setEditingShortSlug(null);
+                  setEditingShortThumbKey(null);
+                }}
+                className="text-xs text-white/50 hover:text-white/80"
+              >
+                Cancel
+              </button>
+            </div>
+            <form onSubmit={handleSaveShort} className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <input
+                  type="text"
+                  value={editShortTitle}
+                  onChange={(event) => setEditShortTitle(event.target.value)}
+                  placeholder="Title"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white/90 focus:outline-none focus:ring-1 focus:ring-white/20"
+                  required
+                />
+                <input
+                  type="text"
+                  value={editShortDescription}
+                  onChange={(event) =>
+                    setEditShortDescription(event.target.value)
+                  }
+                  placeholder="Description"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white/90 focus:outline-none focus:ring-1 focus:ring-white/20"
+                />
+              </div>
+              <div className="grid gap-3 md:grid-cols-3">
+                <label className="text-xs text-white/50 space-y-1">
+                  <span>Replace MP4</span>
+                  <input
+                    type="file"
+                    accept="video/*"
+                    onChange={(event) =>
+                      setEditShortMp4(event.target.files?.[0] || null)
+                    }
+                    className="w-full text-sm text-white/70"
+                  />
+                </label>
+                <label className="text-xs text-white/50 space-y-1">
+                  <span>Replace thumbnail</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(event) =>
+                      setEditShortThumb(event.target.files?.[0] || null)
+                    }
+                    className="w-full text-sm text-white/70"
+                  />
+                </label>
+                <label className="text-xs text-white/50 space-y-1">
+                  <span>Replace HLS ZIP</span>
+                  <input
+                    type="file"
+                    accept=".zip"
+                    onChange={(event) =>
+                      setEditShortHls(event.target.files?.[0] || null)
+                    }
+                    className="w-full text-sm text-white/70"
+                  />
+                </label>
+              </div>
+              {editingShortSlug && editingShortThumbKey ? (
+                <img
+                  src={`/api/shorts/${editingShortSlug}/thumb`}
+                  alt=""
+                  className="h-24 w-16 rounded-lg object-cover border border-white/10"
+                />
+              ) : null}
+              <button
+                type="submit"
+                disabled={savingShort}
+                className="px-4 py-2 rounded-xl bg-white/10 text-sm text-white/90 disabled:opacity-50"
+              >
+                {savingShort ? "Saving..." : "Save changes"}
+              </button>
+              {savingShort && uploadStatus ? (
+                <div className="text-xs text-white/50">{uploadStatus}</div>
+              ) : null}
+            </form>
+          </div>
+        ) : null}
+
+        <div className="glass-panel p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-white/70">Shorts</div>
+            {shortsLoading ? (
+              <div className="text-xs text-white/40">Loading...</div>
+            ) : null}
+          </div>
+
+          <div className="grid gap-3">
+            {shorts.map((short) => (
+              <div
+                key={short.id}
+                className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2"
+              >
+                <div className="flex items-center gap-3">
+                  {short.thumb_key ? (
+                    <img
+                      src={`/api/shorts/${short.slug}/thumb`}
+                      alt=""
+                      className="h-10 w-8 rounded-md object-cover border border-white/10"
+                    />
+                  ) : (
+                    <div className="h-10 w-8 rounded-md bg-white/5 border border-white/10" />
+                  )}
+                  <div>
+                    <div className="text-sm text-white/90">{short.title}</div>
+                    <div className="text-xs text-white/40">{short.slug}</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => handleEditShort(short.id)}
+                    className="px-3 py-1.5 rounded-lg bg-white/10 text-xs text-white/80 hover:bg-white/20"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => handleDeleteShort(short)}
+                    className="px-3 py-1.5 rounded-lg bg-red-500/10 text-xs text-red-200 hover:bg-red-500/20"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            ))}
+            {shorts.length === 0 && !shortsLoading ? (
+              <div className="text-xs text-white/40">No shorts yet.</div>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="glass-panel p-6 space-y-4">
           <div className="text-sm text-white/70">Create new audio</div>
           <form onSubmit={handleCreateAudio} className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
@@ -1765,6 +2422,149 @@ export default function Admin() {
             ))}
             {images.length === 0 && !imageLoading ? (
               <div className="text-xs text-white/40">No images yet.</div>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="glass-panel p-6 space-y-4">
+          <div className="text-sm text-white/70">Create new album</div>
+          <form onSubmit={handleCreateAlbum} className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <input
+                type="text"
+                value={albumTitle}
+                onChange={(event) => setAlbumTitle(event.target.value)}
+                placeholder="Album title"
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white/90 focus:outline-none focus:ring-1 focus:ring-white/20"
+                required
+              />
+              <input
+                type="text"
+                value={albumDescription}
+                onChange={(event) => setAlbumDescription(event.target.value)}
+                placeholder="Description (optional)"
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white/90 focus:outline-none focus:ring-1 focus:ring-white/20"
+              />
+            </div>
+            <label className="text-xs text-white/50 space-y-1">
+              <span>Album images (select multiple)</span>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={(event) =>
+                  setAlbumFiles(Array.from(event.target.files || []))
+                }
+                className="w-full text-sm text-white/70"
+                required
+              />
+            </label>
+            <button
+              type="submit"
+              disabled={creatingAlbum}
+              className="px-4 py-2 rounded-xl bg-white/10 text-sm text-white/90 disabled:opacity-50"
+            >
+              {creatingAlbum ? "Uploading..." : "Create album"}
+            </button>
+            {creatingAlbum && uploadStatus ? (
+              <div className="text-xs text-white/50">{uploadStatus}</div>
+            ) : null}
+          </form>
+        </div>
+
+        {editingAlbumId ? (
+          <div className="glass-panel p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-white/70">Edit album</div>
+              <button
+                onClick={() => setEditingAlbumId(null)}
+                className="text-xs text-white/50 hover:text-white/80"
+              >
+                Cancel
+              </button>
+            </div>
+            <form onSubmit={handleSaveAlbum} className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <input
+                  type="text"
+                  value={editAlbumTitle}
+                  onChange={(event) => setEditAlbumTitle(event.target.value)}
+                  placeholder="Album title"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white/90 focus:outline-none focus:ring-1 focus:ring-white/20"
+                  required
+                />
+                <input
+                  type="text"
+                  value={editAlbumDescription}
+                  onChange={(event) =>
+                    setEditAlbumDescription(event.target.value)
+                  }
+                  placeholder="Description"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white/90 focus:outline-none focus:ring-1 focus:ring-white/20"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={savingAlbum}
+                className="px-4 py-2 rounded-xl bg-white/10 text-sm text-white/90 disabled:opacity-50"
+              >
+                {savingAlbum ? "Saving..." : "Save changes"}
+              </button>
+            </form>
+          </div>
+        ) : null}
+
+        <div className="glass-panel p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-white/70">Albums</div>
+            {albumLoading ? (
+              <div className="text-xs text-white/40">Loading...</div>
+            ) : null}
+          </div>
+
+          <div className="grid gap-3">
+            {albums.map((album) => (
+              <div
+                key={album.id}
+                className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2"
+              >
+                <div className="flex items-center gap-3">
+                  {album.cover_thumb_key || album.cover_key ? (
+                    <img
+                      src={`/media/${album.cover_thumb_key || album.cover_key}`}
+                      alt=""
+                      className="h-10 w-10 rounded-md object-cover border border-white/10"
+                    />
+                  ) : (
+                    <div className="h-10 w-10 rounded-md bg-white/5 border border-white/10 flex items-center justify-center text-xs text-white/40">
+                      Alb
+                    </div>
+                  )}
+                  <div>
+                    <div className="text-sm text-white/90">{album.title}</div>
+                    <div className="text-xs text-white/40">
+                      {album.count || 0} ảnh
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => handleEditAlbum(album.id)}
+                    className="px-3 py-1.5 rounded-lg bg-white/10 text-xs text-white/80 hover:bg-white/20"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => handleDeleteAlbum(album)}
+                    className="px-3 py-1.5 rounded-lg bg-red-500/10 text-xs text-red-200 hover:bg-red-500/20"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            ))}
+            {albums.length === 0 && !albumLoading ? (
+              <div className="text-xs text-white/40">No albums yet.</div>
             ) : null}
           </div>
         </div>

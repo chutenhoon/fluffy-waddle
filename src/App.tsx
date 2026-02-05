@@ -5,6 +5,7 @@ import Login from "./pages/Login";
 import Gallery from "./pages/Gallery";
 import Home from "./pages/Home";
 import Watch from "./pages/Watch";
+import Shorts from "./pages/Shorts";
 import Admin from "./pages/Admin";
 import Audio from "./pages/Audio";
 import AudioDetail from "./pages/AudioDetail";
@@ -30,6 +31,7 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/videos" element={<Gallery />} />
         <Route path="/watch/:slug" element={<Watch />} />
+        <Route path="/shorts/:slug" element={<Shorts />} />
         <Route path="/audio" element={<Audio />} />
         <Route path="/audio/:id" element={<AudioDetail />} />
         <Route path="/images" element={<Images />} />

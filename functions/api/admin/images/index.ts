@@ -35,7 +35,7 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
 
   if (request.method === "GET") {
     const { results } = await env.DB.prepare(
-      "SELECT id, title, description, image_key, thumb_key, created_at, updated_at FROM images ORDER BY created_at DESC"
+      "SELECT id, title, description, image_key, thumb_key, created_at, updated_at FROM images WHERE album_id IS NULL ORDER BY created_at DESC"
     ).all();
     return json(results || []);
   }
@@ -106,8 +106,8 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
 
   await env.DB.prepare(
     `INSERT INTO images
-      (id, title, description, image_key, thumb_key, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
+      (id, title, description, image_key, thumb_key, album_id, sort_order, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
     .bind(
       id,
@@ -115,6 +115,8 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
       description || null,
       imageKey,
       thumbKey,
+      null,
+      null,
       now,
       now
     )

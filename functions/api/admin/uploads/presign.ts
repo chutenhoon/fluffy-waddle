@@ -59,6 +59,7 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
 
   let payload: {
     videoId?: string;
+    shortId?: string;
     audioId?: string;
     imageId?: string;
     path?: string;
@@ -72,6 +73,7 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
   }
 
   const videoId = payload.videoId?.trim() || "";
+  const shortId = payload.shortId?.trim() || "";
   const audioId = payload.audioId?.trim() || "";
   const imageId = payload.imageId?.trim() || "";
   const path = payload.path?.trim() || "";
@@ -82,9 +84,11 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
   }
 
   const hasVideo = Boolean(videoId);
+  const hasShort = Boolean(shortId);
   const hasAudio = Boolean(audioId);
   const hasImage = Boolean(imageId);
-  const targetCount = [hasVideo, hasAudio, hasImage].filter(Boolean).length;
+  const targetCount = [hasVideo, hasShort, hasAudio, hasImage].filter(Boolean)
+    .length;
   if (targetCount !== 1) {
     return errorJson(400, "Missing upload target.");
   }
@@ -92,6 +96,13 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
   if (hasVideo) {
     if (!isValidUuid(videoId)) {
       return errorJson(400, "Invalid video id.");
+    }
+    if (!isSafePath(path) || !isAllowedPath(path)) {
+      return errorJson(400, "Invalid upload path.");
+    }
+  } else if (hasShort) {
+    if (!isValidUuid(shortId)) {
+      return errorJson(400, "Invalid short id.");
     }
     if (!isSafePath(path) || !isAllowedPath(path)) {
       return errorJson(400, "Invalid upload path.");
@@ -126,9 +137,11 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
 
   const objectKey = hasVideo
     ? `videos/${videoId}/${path}`
-    : hasAudio
-      ? `audios/${audioId}/${path}`
-      : `images/${imageId}/${path}`;
+    : hasShort
+      ? `shorts/${shortId}/${path}`
+      : hasAudio
+        ? `audios/${audioId}/${path}`
+        : `images/${imageId}/${path}`;
 
   try {
     const uploadUrl = await presignObjectUpload(env, objectKey, contentType);

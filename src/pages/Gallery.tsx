@@ -1,6 +1,7 @@
 ﻿import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { apiFetch } from "../api/client";
+import ShortCard, { ShortItem } from "../components/ShortCard";
 import VideoCard, { VideoItem } from "../components/VideoCard";
 import Loading from "../components/Loading";
 import { useSearch } from "../contexts/SearchContext";
@@ -12,6 +13,11 @@ export default function Gallery() {
     queryFn: () => apiFetch<VideoItem[]>("/api/videos")
   });
 
+  const { data: shorts, isLoading: shortsLoading } = useQuery({
+    queryKey: ["shorts"],
+    queryFn: () => apiFetch<ShortItem[]>("/api/shorts")
+  });
+
   const filtered = useMemo(() => {
     if (!data) return [];
     const needle = query.trim().toLowerCase();
@@ -21,7 +27,16 @@ export default function Gallery() {
     );
   }, [data, query]);
 
-  if (isLoading) {
+  const filteredShorts = useMemo(() => {
+    if (!shorts) return [];
+    const needle = query.trim().toLowerCase();
+    if (!needle) return shorts;
+    return shorts.filter((short) =>
+      short.title.toLowerCase().includes(needle)
+    );
+  }, [shorts, query]);
+
+  if (isLoading || shortsLoading) {
     return (
       <Loading
         title="Đợi xíu nha"
@@ -39,16 +54,30 @@ export default function Gallery() {
             Những đoạn video kỷ niệm.
           </p>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filtered.map((video) => (
-            <VideoCard key={video.id} video={video} />
-          ))}
-          {filtered.length === 0 ? (
-            <div className="text-white/50 text-sm">
-              {query ? "Không tìm thấy nội dung phù hợp." : "Chưa có video nào."}
+        {filtered.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filtered.map((video) => (
+              <VideoCard key={video.id} video={video} />
+            ))}
+          </div>
+        ) : filteredShorts.length === 0 ? (
+          <div className="text-white/50 text-sm">
+            {query ? "Không tìm thấy nội dung phù hợp." : "Chưa có video nào."}
+          </div>
+        ) : null}
+
+        {filteredShorts.length > 0 ? (
+          <div className="space-y-3">
+            <div className="text-xs uppercase tracking-[0.4em] text-white/35">
+              Shorts
             </div>
-          ) : null}
-        </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+              {filteredShorts.map((short) => (
+                <ShortCard key={short.id} short={short} />
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );

@@ -58,7 +58,9 @@ export default function Navbar() {
       menuItems.map((item) => {
         const isActive =
           location.pathname.startsWith(item.to) ||
-          (item.to === "/videos" && location.pathname.startsWith("/watch"));
+          (item.to === "/videos" &&
+            (location.pathname.startsWith("/watch") ||
+              location.pathname.startsWith("/shorts")));
         const base =
           "flex items-center justify-between rounded-xl px-3 py-2 text-sm transition";
         const active = isActive

@@ -7,6 +7,8 @@ CREATE TABLE IF NOT EXISTS images (
   description TEXT,
   image_key TEXT NOT NULL,
   thumb_key TEXT,
+  album_id TEXT,
+  sort_order INTEGER,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -15,7 +17,9 @@ CREATE TABLE IF NOT EXISTS images (
 const ADD_COLUMNS = [
   { name: "description", type: "TEXT" },
   { name: "image_key", type: "TEXT" },
-  { name: "thumb_key", type: "TEXT" }
+  { name: "thumb_key", type: "TEXT" },
+  { name: "album_id", type: "TEXT" },
+  { name: "sort_order", type: "INTEGER" }
 ];
 
 type ColumnRow = { name: string };

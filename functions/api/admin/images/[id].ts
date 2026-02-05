@@ -26,22 +26,28 @@ export const onRequest: PagesFunction<Env> = async ({ request, env, params }) =>
 
   if (request.method === "GET") {
     const row = await env.DB.prepare(
-      "SELECT id, title, description, image_key, thumb_key, created_at, updated_at FROM images WHERE id = ?"
+      "SELECT id, title, description, image_key, thumb_key, created_at, updated_at, album_id FROM images WHERE id = ?"
     )
       .bind(id)
       .first();
     if (!row) return errorJson(404, "Not found.");
+    if (row.album_id) {
+      return errorJson(400, "Album images are managed via albums.");
+    }
     return json(row);
   }
 
   if (request.method === "DELETE") {
     const row = await env.DB.prepare(
-      "SELECT image_key, thumb_key FROM images WHERE id = ?"
+      "SELECT image_key, thumb_key, album_id FROM images WHERE id = ?"
     )
       .bind(id)
-      .first<{ image_key: string | null; thumb_key: string | null }>();
+      .first<{ image_key: string | null; thumb_key: string | null; album_id: string | null }>();
 
     if (!row) return errorJson(404, "Not found.");
+    if (row.album_id) {
+      return errorJson(400, "Album images are managed via albums.");
+    }
 
     const deletions: Promise<unknown>[] = [];
     if (row.image_key) deletions.push(env.R2_VIDEOS.delete(row.image_key));
@@ -59,6 +65,16 @@ export const onRequest: PagesFunction<Env> = async ({ request, env, params }) =>
 
   if (request.method !== "PUT") {
     return new Response(null, { status: 405 });
+  }
+
+  const albumCheck = await env.DB.prepare(
+    "SELECT album_id FROM images WHERE id = ?"
+  )
+    .bind(id)
+    .first<{ album_id: string | null }>();
+  if (!albumCheck) return errorJson(404, "Not found.");
+  if (albumCheck.album_id) {
+    return errorJson(400, "Album images are managed via albums.");
   }
 
   let payload: {
