@@ -328,7 +328,7 @@ export default function Shorts() {
           }
         });
       },
-      { root, threshold: 0.6 }
+      { root, threshold: 0.75 }
     );
 
     itemRefs.current.forEach((el) => {
@@ -378,7 +378,7 @@ export default function Shorts() {
         </Link>
         <div
           ref={containerRef}
-          className="h-[calc(100vh-140px)] md:h-[calc(100vh-160px)] overflow-y-auto snap-y snap-mandatory"
+          className="shorts-scroll h-[calc(100vh-140px)] md:h-[calc(100vh-160px)] overflow-y-auto snap-y snap-mandatory scroll-smooth overscroll-contain touch-pan-y"
         >
           {shorts.map((short, index) => (
             <div
@@ -387,7 +387,7 @@ export default function Shorts() {
                 itemRefs.current[index] = el;
               }}
               data-index={index}
-              className="snap-start h-full"
+              className="snap-start snap-always h-full"
             >
               <ShortSlide short={short} active={index === activeIndex} />
             </div>

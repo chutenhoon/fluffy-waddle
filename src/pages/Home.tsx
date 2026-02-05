@@ -184,7 +184,7 @@ export default function Home() {
 
         {filteredImages.length > 0 ? (
           <section className="space-y-4">
-            <SectionHeader title="Hình ảnh" to="/images" action="Xem riêng" />
+            <SectionHeader title={"H\u00ECnh \u1EA3nh"} to="/images" action="Xem ri\u00EAng" />
             <div className="flex gap-4 overflow-x-auto pb-2 snap-x snap-mandatory">
               {filteredImages.map((image) => (
                 <div

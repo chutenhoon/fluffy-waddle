@@ -35,9 +35,19 @@ body {
   .text-subtle {
     @apply text-white/40;
   }
-}
+  }
 
-input, button, textarea, select {
+  .shorts-scroll {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .shorts-scroll::-webkit-scrollbar {
+    display: none;
+  }
+
+  input, button, textarea, select {
   font-family: inherit;
 }
 

@@ -531,7 +531,6 @@ export default function Admin() {
       }
       return Array.from(seen.values());
     });
-    event.target.value = "";
   };
 
   const [noteTitle, setNoteTitle] = useState("");
@@ -2531,7 +2530,7 @@ export default function Admin() {
 
         <div className="glass-panel p-6 space-y-4">
           <div className="text-sm text-white/70">Create new album</div>
-          <form onSubmit={handleCreateAlbum} className="space-y-4">
+          <form onSubmit={handleCreateAlbum} className="space-y-4" noValidate>
             <div className="grid gap-4 md:grid-cols-2">
               <input
                 type="text"
@@ -2557,7 +2556,6 @@ export default function Admin() {
                 multiple
                 onChange={handleAlbumFilesChange}
                 className="w-full text-sm text-white/70"
-                required
               />
             </label>
               {albumFiles.length > 0 ? (

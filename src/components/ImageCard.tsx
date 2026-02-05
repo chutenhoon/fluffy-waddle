@@ -87,9 +87,9 @@ export default function ImageCard({
   return (
     <Link
       to={`/images/${image.id}`}
-      className={`group block glass-card overflow-hidden transition-transform duration-200 hover:-translate-y-0.5 ${className}`}
+      className={`group block glass-card overflow-hidden transition-shadow duration-200 ${className}`}
     >
-      <div className="relative aspect-[3/4] bg-white/5">
+      <div className="relative aspect-[3/4] bg-black/20">
         {previewSrc ? (
           <img
             src={previewSrc}
@@ -102,7 +102,6 @@ export default function ImageCard({
             No preview
           </div>
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
 
         <div className="absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] text-white/90">
           {isAlbum ? "Album" : "\u1EA2nh"}
