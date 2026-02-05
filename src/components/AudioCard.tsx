@@ -1,5 +1,6 @@
 ﻿import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { Link } from "react-router-dom";
+import { useIntersection } from "../hooks/useIntersection";
 
 type AudioItem = {
   id: string;
@@ -25,18 +26,31 @@ function formatTime(value: number) {
 }
 
 export default function AudioCard({ audio }: { audio: AudioItem }) {
+  const cardRef = useRef<HTMLAnchorElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const rafRef = useRef<number | null>(null);
   const lastTick = useRef(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [shouldLoad, setShouldLoad] = useState(false);
 
   const audioSrc = `/media/${audio.audio_key}`;
   const hasThumb = Boolean(audio.thumb_key);
   const noteText = audio.note_system_error
     ? "Do lỗi hệ thống không ghi lại được hình ảnh"
     : audio.description || null;
+
+  const isVisible = useIntersection(cardRef, {
+    rootMargin: "200px",
+    threshold: 0.15
+  });
+
+  useEffect(() => {
+    if (isVisible) {
+      setShouldLoad(true);
+    }
+  }, [isVisible]);
 
   const stopRaf = () => {
     if (rafRef.current) {
@@ -59,6 +73,15 @@ export default function AudioCard({ audio }: { audio: AudioItem }) {
   useEffect(() => {
     return () => stopRaf();
   }, []);
+
+  useEffect(() => {
+    const element = audioRef.current;
+    if (!element || !shouldLoad) return;
+    if (!element.src) {
+      element.src = audioSrc;
+      element.load();
+    }
+  }, [audioSrc, shouldLoad]);
 
   const togglePlay = async (event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
@@ -97,6 +120,7 @@ export default function AudioCard({ audio }: { audio: AudioItem }) {
 
   return (
     <Link
+      ref={cardRef}
       to={`/audio/${audio.id}`}
       className="block glass-card overflow-hidden transition-transform duration-200 hover:-translate-y-0.5"
     >
@@ -153,11 +177,13 @@ export default function AudioCard({ audio }: { audio: AudioItem }) {
 
         <audio
           ref={audioRef}
+          src={shouldLoad ? audioSrc : undefined}
           preload="metadata"
           onPlay={handlePlay}
           onPause={handlePause}
           onEnded={handlePause}
           onLoadedMetadata={handleLoaded}
+          onDurationChange={handleLoaded}
         />
       </div>
     </Link>

@@ -1,4 +1,4 @@
-﻿import { FormEvent, useEffect, useState } from "react";
+﻿import { FormEvent, useEffect, useState, type ChangeEvent } from "react";
 import { unzip } from "fflate";
 import { apiFetch, apiFetchVoid, ApiError } from "../api/client";
 import Loading from "../components/Loading";
@@ -401,6 +401,7 @@ export default function Admin() {
   const [hlsFile, setHlsFile] = useState<File | null>(null);
   const [creating, setCreating] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
+  const [videoSuccess, setVideoSuccess] = useState<string | null>(null);
 
   const [shortTitle, setShortTitle] = useState("");
   const [shortDescription, setShortDescription] = useState("");
@@ -408,6 +409,7 @@ export default function Admin() {
   const [shortThumbFile, setShortThumbFile] = useState<File | null>(null);
   const [shortHlsFile, setShortHlsFile] = useState<File | null>(null);
   const [creatingShort, setCreatingShort] = useState(false);
+  const [shortSuccess, setShortSuccess] = useState<string | null>(null);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingSlug, setEditingSlug] = useState<string | null>(null);
@@ -449,6 +451,22 @@ export default function Admin() {
   const [editAlbumTitle, setEditAlbumTitle] = useState("");
   const [editAlbumDescription, setEditAlbumDescription] = useState("");
   const [savingAlbum, setSavingAlbum] = useState(false);
+
+  const handleAlbumFilesChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) return;
+    setAlbumFiles((prev) => {
+      const seen = new Map<string, File>();
+      for (const file of prev) {
+        seen.set(`${file.name}-${file.size}-${file.lastModified}`, file);
+      }
+      for (const file of files) {
+        seen.set(`${file.name}-${file.size}-${file.lastModified}`, file);
+      }
+      return Array.from(seen.values());
+    });
+    event.target.value = "";
+  };
 
   const [noteTitle, setNoteTitle] = useState("");
   const [noteContent, setNoteContent] = useState("");
@@ -602,6 +620,7 @@ export default function Admin() {
     setCreating(true);
     setError(null);
     setUploadStatus(null);
+    setVideoSuccess(null);
 
     try {
       const videoId = crypto.randomUUID();
@@ -627,15 +646,20 @@ export default function Admin() {
           thumbType
         );
       } else {
-        setUploadStatus("Generating thumbnail...");
-        const autoThumb = await generateThumbnailFromVideo(mp4File);
-        setUploadStatus("Uploading thumbnail...");
-        thumbKey = await uploadToR2(
-          { videoId },
-          "thumb.jpg",
-          autoThumb,
-          "image/jpeg"
-        );
+        try {
+          setUploadStatus("Generating thumbnail...");
+          const autoThumb = await generateThumbnailFromVideo(mp4File);
+          setUploadStatus("Uploading thumbnail...");
+          thumbKey = await uploadToR2(
+            { videoId },
+            "thumb.jpg",
+            autoThumb,
+            "image/jpeg"
+          );
+        } catch {
+          setUploadStatus("Skipping thumbnail...");
+          thumbKey = null;
+        }
       }
 
       setUploadStatus("Extracting HLS ZIP...");
@@ -680,6 +704,7 @@ export default function Admin() {
       setThumbFile(null);
       setHlsFile(null);
       await loadVideos();
+      setVideoSuccess(`Đã upload xong video: ${cleanedTitle}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed.");
     } finally {
@@ -699,6 +724,7 @@ export default function Admin() {
     setCreatingShort(true);
     setError(null);
     setUploadStatus(null);
+    setShortSuccess(null);
 
     try {
       const shortId = crypto.randomUUID();
@@ -724,15 +750,20 @@ export default function Admin() {
           thumbType
         );
       } else {
-        setUploadStatus("Generating thumbnail...");
-        const autoThumb = await generateThumbnailFromVideo(shortMp4File);
-        setUploadStatus("Uploading thumbnail...");
-        thumbKey = await uploadToR2(
-          { shortId },
-          "thumb.jpg",
-          autoThumb,
-          "image/jpeg"
-        );
+        try {
+          setUploadStatus("Generating thumbnail...");
+          const autoThumb = await generateThumbnailFromVideo(shortMp4File);
+          setUploadStatus("Uploading thumbnail...");
+          thumbKey = await uploadToR2(
+            { shortId },
+            "thumb.jpg",
+            autoThumb,
+            "image/jpeg"
+          );
+        } catch {
+          setUploadStatus("Skipping thumbnail...");
+          thumbKey = null;
+        }
       }
 
       setUploadStatus("Extracting HLS ZIP...");
@@ -777,6 +808,7 @@ export default function Admin() {
       setShortThumbFile(null);
       setShortHlsFile(null);
       await loadShorts();
+      setShortSuccess(`Đã upload xong short: ${cleanedTitle}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed.");
     } finally {
@@ -1692,6 +1724,9 @@ export default function Admin() {
             {creating && uploadStatus ? (
               <div className="text-xs text-white/50">{uploadStatus}</div>
             ) : null}
+            {!creating && videoSuccess ? (
+              <div className="text-xs text-emerald-300/80">{videoSuccess}</div>
+            ) : null}
           </form>
         </div>
 
@@ -1901,6 +1936,9 @@ export default function Admin() {
             </button>
             {creatingShort && uploadStatus ? (
               <div className="text-xs text-white/50">{uploadStatus}</div>
+            ) : null}
+            {!creatingShort && shortSuccess ? (
+              <div className="text-xs text-emerald-300/80">{shortSuccess}</div>
             ) : null}
           </form>
         </div>
@@ -2452,13 +2490,23 @@ export default function Admin() {
                 type="file"
                 accept="image/*"
                 multiple
-                onChange={(event) =>
-                  setAlbumFiles(Array.from(event.target.files || []))
-                }
+                onChange={handleAlbumFilesChange}
                 className="w-full text-sm text-white/70"
                 required
               />
             </label>
+              {albumFiles.length > 0 ? (
+                <div className="flex items-center gap-2 text-xs text-white/50">
+                  <span>{albumFiles.length} ?nh ?? ch?n</span>
+                  <button
+                    type="button"
+                    onClick={() => setAlbumFiles([])}
+                    className="text-xs text-white/70 underline hover:text-white/90"
+                  >
+                    X?a
+                  </button>
+                </div>
+              ) : null}
             <button
               type="submit"
               disabled={creatingAlbum}
