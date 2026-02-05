@@ -3,13 +3,16 @@ import RequireAuth from "./components/RequireAuth";
 import MainLayout from "./components/MainLayout";
 import Login from "./pages/Login";
 import Gallery from "./pages/Gallery";
+import Home from "./pages/Home";
 import Watch from "./pages/Watch";
 import Admin from "./pages/Admin";
 import Audio from "./pages/Audio";
 import AudioDetail from "./pages/AudioDetail";
 import Images from "./pages/Images";
+import ImageDetail from "./pages/ImageDetail";
 import Notes from "./pages/Notes";
-import WebRedirect from "./pages/WebRedirect";
+import Web from "./pages/Web";
+import WebDetail from "./pages/WebDetail";
 
 export default function App() {
   return (
@@ -23,14 +26,17 @@ export default function App() {
           </RequireAuth>
         }
       >
-        <Route path="/" element={<Gallery />} />
+        <Route path="/" element={<Home />} />
+        <Route path="/videos" element={<Gallery />} />
         <Route path="/watch/:slug" element={<Watch />} />
         <Route path="/audio" element={<Audio />} />
         <Route path="/audio/:id" element={<AudioDetail />} />
         <Route path="/images" element={<Images />} />
+        <Route path="/images/:id" element={<ImageDetail />} />
         <Route path="/notes" element={<Notes />} />
-        <Route path="/web" element={<WebRedirect />} />
-        <Route path="*" element={<Gallery />} />
+        <Route path="/web" element={<Web />} />
+        <Route path="/web/:slug" element={<WebDetail />} />
+        <Route path="*" element={<Home />} />
       </Route>
     </Routes>
   );

@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+﻿import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiFetch } from "../api/client";
@@ -98,8 +98,8 @@ export default function AudioDetail() {
   if (isLoading) {
     return (
       <Loading
-        title="Doi xi nha"
-        subtitle="Dang tai am thanh."
+        title="Đợi xíu nha"
+        subtitle="Đang tải âm thanh."
       />
     );
   }
@@ -109,17 +109,16 @@ export default function AudioDetail() {
   }
 
   const audioSrc = `/media/${data.audio_key}`;
-  const noteText =
-    data.note_system_error || data.description
-      ? "Do lỗi hệ thống không ghi lại được hình ảnh"
-      : null;
+  const noteText = data.note_system_error
+    ? "Do lỗi hệ thống không ghi lại được hình ảnh"
+    : data.description || null;
   const progress = duration ? Math.min(100, (currentTime / duration) * 100) : 0;
 
   return (
     <div className="min-h-screen px-5 py-8 md:px-10">
       <div className="max-w-[960px] mx-auto space-y-6">
         <Link to="/audio" className="text-sm text-white/60 hover:text-white/90">
-          Back to audio
+          Quay lại âm thanh
         </Link>
 
         <div className="glass-panel p-6 space-y-6">

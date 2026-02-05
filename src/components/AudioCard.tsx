@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MouseEvent } from "react";
+﻿import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { Link } from "react-router-dom";
 
 type AudioItem = {
@@ -34,10 +34,9 @@ export default function AudioCard({ audio }: { audio: AudioItem }) {
 
   const audioSrc = `/media/${audio.audio_key}`;
   const hasThumb = Boolean(audio.thumb_key);
-  const noteText =
-    audio.note_system_error || audio.description
-      ? "Do lỗi hệ thống không ghi lại được hình ảnh"
-      : null;
+  const noteText = audio.note_system_error
+    ? "Do lỗi hệ thống không ghi lại được hình ảnh"
+    : audio.description || null;
 
   const stopRaf = () => {
     if (rafRef.current) {

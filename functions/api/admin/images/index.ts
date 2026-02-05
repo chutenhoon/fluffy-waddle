@@ -1,7 +1,7 @@
-﻿import type { Env } from "../../../_lib/env";
+import type { Env } from "../../../_lib/env";
 import { errorJson, json } from "../../../_lib/response";
 import { requireAdmin } from "../../../_lib/adminAuth";
-import { ensureAudiosSchema } from "../../../_lib/audioSchema";
+import { ensureImagesSchema } from "../../../_lib/imageSchema";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -10,41 +10,32 @@ function isValidUuid(value: string) {
   return UUID_RE.test(value);
 }
 
-function extractAudioId(key: string) {
-  const match = /^audios\/([^/]+)\/audio\./.exec(key);
+function extractImageId(key: string) {
+  const match = /^images\/([^/]+)\//.exec(key);
   return match ? match[1] : null;
 }
 
-function isValidAudioKey(id: string, key: string) {
-  if (!key.startsWith(`audios/${id}/audio.`)) return false;
-  const rest = key.slice(`audios/${id}/`.length);
-  return !rest.includes("/") && rest.startsWith("audio.");
+function isValidImageKey(id: string, key: string) {
+  if (!key.startsWith(`images/${id}/image.`)) return false;
+  const rest = key.slice(`images/${id}/`.length);
+  return !rest.includes("/") && rest.startsWith("image.");
 }
 
 function isValidThumbKey(id: string, key: string) {
-  if (!key.startsWith(`audios/${id}/thumb.`)) return false;
-  const rest = key.slice(`audios/${id}/`.length);
+  if (!key.startsWith(`images/${id}/thumb.`)) return false;
+  const rest = key.slice(`images/${id}/`.length);
   return !rest.includes("/") && rest.startsWith("thumb.");
-}
-
-function normalizeNote(value: unknown) {
-  if (typeof value === "number") return value ? 1 : 0;
-  if (typeof value === "boolean") return value ? 1 : 0;
-  if (typeof value === "string") {
-    return value === "1" || value.toLowerCase() === "true" ? 1 : 0;
-  }
-  return 0;
 }
 
 export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
   const guard = requireAdmin(request, env);
   if (guard) return guard;
 
-  await ensureAudiosSchema(env);
+  await ensureImagesSchema(env);
 
   if (request.method === "GET") {
     const { results } = await env.DB.prepare(
-      "SELECT id, title, description, note_system_error, audio_key, thumb_key, created_at, updated_at FROM audios ORDER BY created_at DESC"
+      "SELECT id, title, description, image_key, thumb_key, created_at, updated_at FROM images ORDER BY created_at DESC"
     ).all();
     return json(results || []);
   }
@@ -56,8 +47,8 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
   let payload: {
     id?: string;
     title?: string;
-    note_system_error?: unknown;
-    audio_key?: string;
+    description?: string | null;
+    image_key?: string;
     thumb_key?: string | null;
   } = {};
 
@@ -68,28 +59,28 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
   }
 
   const title = payload.title?.toString().trim() || "";
-  const audioKey = payload.audio_key?.toString().trim() || "";
+  const imageKey = payload.image_key?.toString().trim() || "";
   const providedId = payload.id?.toString().trim() || "";
 
-  if (!title || !audioKey) {
+  if (!title || !imageKey) {
     return errorJson(400, "Missing required fields.");
   }
 
   if (providedId && !isValidUuid(providedId)) {
-    return errorJson(400, "Invalid audio id.");
+    return errorJson(400, "Invalid image id.");
   }
 
-  const inferredId = extractAudioId(audioKey);
+  const inferredId = extractImageId(imageKey);
   const id = providedId || inferredId || "";
   if (!id || !isValidUuid(id)) {
-    return errorJson(400, "Invalid audio id.");
+    return errorJson(400, "Invalid image id.");
   }
   if (inferredId && inferredId !== id) {
-    return errorJson(400, "Audio id does not match audio_key.");
+    return errorJson(400, "Image id does not match image_key.");
   }
 
-  if (!isValidAudioKey(id, audioKey)) {
-    return errorJson(400, "Invalid audio_key.");
+  if (!isValidImageKey(id, imageKey)) {
+    return errorJson(400, "Invalid image_key.");
   }
 
   let thumbKey: string | null = null;
@@ -106,21 +97,23 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
     }
   }
 
-  const note = normalizeNote(payload.note_system_error);
-  const description = note ? "Do lỗi hệ thống không ghi lại được hình ảnh" : null;
+  const description =
+    typeof payload.description === "string"
+      ? payload.description.trim()
+      : "";
+
   const now = new Date().toISOString();
 
   await env.DB.prepare(
-    `INSERT INTO audios
-      (id, title, description, note_system_error, audio_key, thumb_key, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO images
+      (id, title, description, image_key, thumb_key, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
   )
     .bind(
       id,
       title,
-      description,
-      note,
-      audioKey,
+      description || null,
+      imageKey,
       thumbKey,
       now,
       now
@@ -128,11 +121,10 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
     .run();
 
   const created = await env.DB.prepare(
-    "SELECT id, title, description, note_system_error, audio_key, thumb_key, created_at, updated_at FROM audios WHERE id = ?"
+    "SELECT id, title, description, image_key, thumb_key, created_at, updated_at FROM images WHERE id = ?"
   )
     .bind(id)
     .first();
 
-  return json({ ok: true, audio: created });
+  return json({ ok: true, image: created });
 };
-

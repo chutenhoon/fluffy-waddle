@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+﻿import { FormEvent, useEffect, useState } from "react";
 import { unzip } from "fflate";
 import { apiFetch, apiFetchVoid, ApiError } from "../api/client";
 import Loading from "../components/Loading";
@@ -27,6 +27,24 @@ type AdminAudio = {
   description?: string | null;
   audio_key?: string | null;
   thumb_key?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type AdminImage = {
+  id: string;
+  title: string;
+  description?: string | null;
+  image_key?: string | null;
+  thumb_key?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type AdminNote = {
+  id: string;
+  title: string;
+  content: string;
   created_at: string;
   updated_at: string;
 };
@@ -257,6 +275,7 @@ function audioContentType(file: File, ext: string) {
 async function requestPresign(params: {
   videoId?: string;
   audioId?: string;
+  imageId?: string;
   path: string;
   contentType: string;
 }) {
@@ -267,7 +286,7 @@ async function requestPresign(params: {
 }
 
 async function uploadToR2(
-  target: { videoId?: string; audioId?: string },
+  target: { videoId?: string; audioId?: string; imageId?: string },
   path: string,
   body: Blob | Uint8Array | File,
   contentType: string
@@ -323,6 +342,10 @@ export default function Admin() {
   const [loading, setLoading] = useState(false);
   const [audios, setAudios] = useState<AdminAudio[]>([]);
   const [audioLoading, setAudioLoading] = useState(false);
+  const [images, setImages] = useState<AdminImage[]>([]);
+  const [imageLoading, setImageLoading] = useState(false);
+  const [notes, setNotes] = useState<AdminNote[]>([]);
+  const [noteLoading, setNoteLoading] = useState(false);
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -348,12 +371,36 @@ export default function Admin() {
   const [audioThumb, setAudioThumb] = useState<File | null>(null);
   const [creatingAudio, setCreatingAudio] = useState(false);
 
+  const [imageTitle, setImageTitle] = useState("");
+  const [imageDescription, setImageDescription] = useState("");
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imageThumb, setImageThumb] = useState<File | null>(null);
+  const [creatingImage, setCreatingImage] = useState(false);
+
+  const [noteTitle, setNoteTitle] = useState("");
+  const [noteContent, setNoteContent] = useState("");
+  const [creatingNote, setCreatingNote] = useState(false);
+
   const [editingAudioId, setEditingAudioId] = useState<string | null>(null);
   const [editAudioTitle, setEditAudioTitle] = useState("");
   const [editAudioNote, setEditAudioNote] = useState(false);
   const [editAudioFile, setEditAudioFile] = useState<File | null>(null);
   const [editAudioThumb, setEditAudioThumb] = useState<File | null>(null);
   const [savingAudio, setSavingAudio] = useState(false);
+
+  const [editingImageId, setEditingImageId] = useState<string | null>(null);
+  const [editingImageKey, setEditingImageKey] = useState<string | null>(null);
+  const [editingImageThumbKey, setEditingImageThumbKey] = useState<string | null>(null);
+  const [editImageTitle, setEditImageTitle] = useState("");
+  const [editImageDescription, setEditImageDescription] = useState("");
+  const [editImageFile, setEditImageFile] = useState<File | null>(null);
+  const [editImageThumb, setEditImageThumb] = useState<File | null>(null);
+  const [savingImage, setSavingImage] = useState(false);
+
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editNoteTitle, setEditNoteTitle] = useState("");
+  const [editNoteContent, setEditNoteContent] = useState("");
+  const [savingNote, setSavingNote] = useState(false);
 
   const loadVideos = async () => {
     setLoading(true);
@@ -363,6 +410,8 @@ export default function Admin() {
       setVideos(data || []);
       setAuthState("authed");
       await loadAudios();
+      await loadImages();
+      await loadNotes();
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         setAuthState("guest");
@@ -384,6 +433,30 @@ export default function Admin() {
       setError(err instanceof Error ? err.message : "Failed to load audio.");
     } finally {
       setAudioLoading(false);
+    }
+  };
+
+  const loadImages = async () => {
+    setImageLoading(true);
+    try {
+      const data = await apiFetch<AdminImage[]>("/api/admin/images");
+      setImages(data || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load images.");
+    } finally {
+      setImageLoading(false);
+    }
+  };
+
+  const loadNotes = async () => {
+    setNoteLoading(true);
+    try {
+      const data = await apiFetch<AdminNote[]>("/api/admin/notes");
+      setNotes(data || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load notes.");
+    } finally {
+      setNoteLoading(false);
     }
   };
 
@@ -413,6 +486,8 @@ export default function Admin() {
     setAuthState("guest");
     setVideos([]);
     setAudios([]);
+    setImages([]);
+    setNotes([]);
   };
 
   const handleCreate = async (event: FormEvent) => {
@@ -747,6 +822,221 @@ export default function Admin() {
     } finally {
       setSavingAudio(false);
       setUploadStatus(null);
+    }
+  };
+
+  const handleCreateImage = async (event: FormEvent) => {
+    event.preventDefault();
+    const cleanedTitle = imageTitle.trim();
+    if (!cleanedTitle || !imageFile) {
+      setError("Title and image file are required.");
+      return;
+    }
+
+    setCreatingImage(true);
+    setError(null);
+    setUploadStatus(null);
+
+    try {
+      const imageId = crypto.randomUUID();
+      const ext = thumbExtension(imageFile);
+      const imageType = thumbContentType(imageFile, ext);
+      setUploadStatus("Uploading image...");
+      const imageKey = await uploadToR2(
+        { imageId },
+        `image.${ext}`,
+        imageFile,
+        imageType
+      );
+
+      let thumbKey: string | null = null;
+      if (imageThumb) {
+        const thumbExt = thumbExtension(imageThumb);
+        const thumbType = thumbContentType(imageThumb, thumbExt);
+        setUploadStatus("Uploading thumbnail...");
+        thumbKey = await uploadToR2(
+          { imageId },
+          `thumb.${thumbExt}`,
+          imageThumb,
+          thumbType
+        );
+      }
+
+      setUploadStatus("Saving metadata...");
+      await apiFetchVoid("/api/admin/images", {
+        method: "POST",
+        body: JSON.stringify({
+          id: imageId,
+          title: cleanedTitle,
+          description: imageDescription.trim() || null,
+          image_key: imageKey,
+          thumb_key: thumbKey || undefined
+        })
+      });
+
+      setImageTitle("");
+      setImageDescription("");
+      setImageFile(null);
+      setImageThumb(null);
+      await loadImages();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed.");
+    } finally {
+      setCreatingImage(false);
+      setUploadStatus(null);
+    }
+  };
+
+  const handleEditImage = async (id: string) => {
+    setError(null);
+    setEditingImageId(id);
+    setSavingImage(true);
+    try {
+      const data = await apiFetch<AdminImage>(`/api/admin/images/${id}`);
+      setEditImageTitle(data.title);
+      setEditImageDescription(data.description || "");
+      setEditingImageKey(data.image_key || null);
+      setEditingImageThumbKey(data.thumb_key || null);
+      setEditImageFile(null);
+      setEditImageThumb(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load.");
+      setEditingImageId(null);
+      setEditingImageKey(null);
+      setEditingImageThumbKey(null);
+    } finally {
+      setSavingImage(false);
+    }
+  };
+
+  const handleSaveImage = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!editingImageId) return;
+
+    setSavingImage(true);
+    setError(null);
+    setUploadStatus(null);
+
+    try {
+      const payload: Record<string, unknown> = {
+        title: editImageTitle.trim(),
+        description: editImageDescription.trim() || null
+      };
+
+      if (editImageFile) {
+        const ext = thumbExtension(editImageFile);
+        const imageType = thumbContentType(editImageFile, ext);
+        setUploadStatus("Uploading image...");
+        const imageKey = await uploadToR2(
+          { imageId: editingImageId },
+          `image.${ext}`,
+          editImageFile,
+          imageType
+        );
+        payload.image_key = imageKey;
+      }
+
+      if (editImageThumb) {
+        const thumbExt = thumbExtension(editImageThumb);
+        const thumbType = thumbContentType(editImageThumb, thumbExt);
+        setUploadStatus("Uploading thumbnail...");
+        const thumbKey = await uploadToR2(
+          { imageId: editingImageId },
+          `thumb.${thumbExt}`,
+          editImageThumb,
+          thumbType
+        );
+        payload.thumb_key = thumbKey;
+      }
+
+      setUploadStatus("Saving metadata...");
+      await apiFetchVoid(`/api/admin/images/${editingImageId}`, {
+        method: "PUT",
+        body: JSON.stringify(payload)
+      });
+
+      setEditingImageId(null);
+      setEditingImageKey(null);
+      setEditingImageThumbKey(null);
+      await loadImages();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Update failed.");
+    } finally {
+      setSavingImage(false);
+      setUploadStatus(null);
+    }
+  };
+
+  const handleCreateNote = async (event: FormEvent) => {
+    event.preventDefault();
+    const cleanedTitle = noteTitle.trim();
+    const cleanedContent = noteContent.trim();
+    if (!cleanedTitle || !cleanedContent) {
+      setError("Title and content are required.");
+      return;
+    }
+
+    setCreatingNote(true);
+    setError(null);
+
+    try {
+      await apiFetchVoid("/api/admin/notes", {
+        method: "POST",
+        body: JSON.stringify({
+          id: crypto.randomUUID(),
+          title: cleanedTitle,
+          content: cleanedContent
+        })
+      });
+
+      setNoteTitle("");
+      setNoteContent("");
+      await loadNotes();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save note.");
+    } finally {
+      setCreatingNote(false);
+    }
+  };
+
+  const handleEditNote = async (id: string) => {
+    setError(null);
+    setEditingNoteId(id);
+    setSavingNote(true);
+    try {
+      const data = await apiFetch<AdminNote>(`/api/admin/notes/${id}`);
+      setEditNoteTitle(data.title);
+      setEditNoteContent(data.content);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load.");
+      setEditingNoteId(null);
+    } finally {
+      setSavingNote(false);
+    }
+  };
+
+  const handleSaveNote = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!editingNoteId) return;
+
+    setSavingNote(true);
+    setError(null);
+
+    try {
+      await apiFetchVoid(`/api/admin/notes/${editingNoteId}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          title: editNoteTitle.trim(),
+          content: editNoteContent.trim()
+        })
+      });
+
+      setEditingNoteId(null);
+      await loadNotes();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Update failed.");
+    } finally {
+      setSavingNote(false);
     }
   };
 
@@ -1189,8 +1479,296 @@ export default function Admin() {
           </div>
         </div>
 
+        <div className="glass-panel p-6 space-y-4">
+          <div className="text-sm text-white/70">Create new image</div>
+          <form onSubmit={handleCreateImage} className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <input
+                type="text"
+                value={imageTitle}
+                onChange={(event) => setImageTitle(event.target.value)}
+                placeholder="Title"
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white/90 focus:outline-none focus:ring-1 focus:ring-white/20"
+                required
+              />
+              <input
+                type="text"
+                value={imageDescription}
+                onChange={(event) => setImageDescription(event.target.value)}
+                placeholder="Description (optional)"
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white/90 focus:outline-none focus:ring-1 focus:ring-white/20"
+              />
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="text-xs text-white/50 space-y-1">
+                <span>Image file (required)</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(event) =>
+                    setImageFile(event.target.files?.[0] || null)
+                  }
+                  className="w-full text-sm text-white/70"
+                  required
+                />
+              </label>
+              <label className="text-xs text-white/50 space-y-1">
+                <span>Thumbnail (optional)</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(event) =>
+                    setImageThumb(event.target.files?.[0] || null)
+                  }
+                  className="w-full text-sm text-white/70"
+                />
+              </label>
+            </div>
+            <button
+              type="submit"
+              disabled={creatingImage}
+              className="px-4 py-2 rounded-xl bg-white/10 text-sm text-white/90 disabled:opacity-50"
+            >
+              {creatingImage ? "Uploading..." : "Create image"}
+            </button>
+            {creatingImage && uploadStatus ? (
+              <div className="text-xs text-white/50">{uploadStatus}</div>
+            ) : null}
+          </form>
+        </div>
+
+        {editingImageId ? (
+          <div className="glass-panel p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-white/70">Edit image</div>
+              <button
+                onClick={() => {
+                  setEditingImageId(null);
+                  setEditingImageKey(null);
+                  setEditingImageThumbKey(null);
+                }}
+                className="text-xs text-white/50 hover:text-white/80"
+              >
+                Cancel
+              </button>
+            </div>
+            <form onSubmit={handleSaveImage} className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <input
+                  type="text"
+                  value={editImageTitle}
+                  onChange={(event) => setEditImageTitle(event.target.value)}
+                  placeholder="Title"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white/90 focus:outline-none focus:ring-1 focus:ring-white/20"
+                  required
+                />
+                <input
+                  type="text"
+                  value={editImageDescription}
+                  onChange={(event) => setEditImageDescription(event.target.value)}
+                  placeholder="Description"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white/90 focus:outline-none focus:ring-1 focus:ring-white/20"
+                />
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="text-xs text-white/50 space-y-1">
+                  <span>Replace image</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(event) =>
+                      setEditImageFile(event.target.files?.[0] || null)
+                    }
+                    className="w-full text-sm text-white/70"
+                  />
+                </label>
+                <label className="text-xs text-white/50 space-y-1">
+                  <span>Replace thumbnail</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(event) =>
+                      setEditImageThumb(event.target.files?.[0] || null)
+                    }
+                    className="w-full text-sm text-white/70"
+                  />
+                </label>
+              </div>
+              {editingImageThumbKey || editingImageKey ? (
+                <img
+                  src={`/media/${editingImageThumbKey || editingImageKey}`}
+                  alt=""
+                  className="h-24 w-32 rounded-lg object-cover border border-white/10"
+                />
+              ) : null}
+              <button
+                type="submit"
+                disabled={savingImage}
+                className="px-4 py-2 rounded-xl bg-white/10 text-sm text-white/90 disabled:opacity-50"
+              >
+                {savingImage ? "Saving..." : "Save changes"}
+              </button>
+              {savingImage && uploadStatus ? (
+                <div className="text-xs text-white/50">{uploadStatus}</div>
+              ) : null}
+            </form>
+          </div>
+        ) : null}
+
+        <div className="glass-panel p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-white/70">Images</div>
+            {imageLoading ? (
+              <div className="text-xs text-white/40">Loading...</div>
+            ) : null}
+          </div>
+
+          <div className="grid gap-3">
+            {images.map((image) => (
+              <div
+                key={image.id}
+                className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2"
+              >
+                <div className="flex items-center gap-3">
+                  {image.thumb_key || image.image_key ? (
+                    <img
+                      src={`/media/${image.thumb_key || image.image_key}`}
+                      alt=""
+                      className="h-10 w-10 rounded-md object-cover border border-white/10"
+                    />
+                  ) : (
+                    <div className="h-10 w-10 rounded-md bg-white/5 border border-white/10 flex items-center justify-center text-xs text-white/40">
+                      Img
+                    </div>
+                  )}
+                  <div>
+                    <div className="text-sm text-white/90">{image.title}</div>
+                    {image.description ? (
+                      <div className="text-xs text-white/40">
+                        {image.description}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleEditImage(image.id)}
+                  className="px-3 py-1.5 rounded-lg bg-white/10 text-xs text-white/80 hover:bg-white/20"
+                >
+                  Edit
+                </button>
+              </div>
+            ))}
+            {images.length === 0 && !imageLoading ? (
+              <div className="text-xs text-white/40">No images yet.</div>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="glass-panel p-6 space-y-4">
+          <div className="text-sm text-white/70">Create new note</div>
+          <form onSubmit={handleCreateNote} className="space-y-4">
+            <input
+              type="text"
+              value={noteTitle}
+              onChange={(event) => setNoteTitle(event.target.value)}
+              placeholder="Title"
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white/90 focus:outline-none focus:ring-1 focus:ring-white/20"
+              required
+            />
+            <textarea
+              value={noteContent}
+              onChange={(event) => setNoteContent(event.target.value)}
+              placeholder="Write something..."
+              rows={4}
+              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white/90 focus:outline-none focus:ring-1 focus:ring-white/20"
+              required
+            />
+            <button
+              type="submit"
+              disabled={creatingNote}
+              className="px-4 py-2 rounded-xl bg-white/10 text-sm text-white/90 disabled:opacity-50"
+            >
+              {creatingNote ? "Saving..." : "Create note"}
+            </button>
+          </form>
+        </div>
+
+        {editingNoteId ? (
+          <div className="glass-panel p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-white/70">Edit note</div>
+              <button
+                onClick={() => setEditingNoteId(null)}
+                className="text-xs text-white/50 hover:text-white/80"
+              >
+                Cancel
+              </button>
+            </div>
+            <form onSubmit={handleSaveNote} className="space-y-4">
+              <input
+                type="text"
+                value={editNoteTitle}
+                onChange={(event) => setEditNoteTitle(event.target.value)}
+                placeholder="Title"
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white/90 focus:outline-none focus:ring-1 focus:ring-white/20"
+                required
+              />
+              <textarea
+                value={editNoteContent}
+                onChange={(event) => setEditNoteContent(event.target.value)}
+                placeholder="Content"
+                rows={4}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white/90 focus:outline-none focus:ring-1 focus:ring-white/20"
+                required
+              />
+              <button
+                type="submit"
+                disabled={savingNote}
+                className="px-4 py-2 rounded-xl bg-white/10 text-sm text-white/90 disabled:opacity-50"
+              >
+                {savingNote ? "Saving..." : "Save changes"}
+              </button>
+            </form>
+          </div>
+        ) : null}
+
+        <div className="glass-panel p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-white/70">Notes</div>
+            {noteLoading ? (
+              <div className="text-xs text-white/40">Loading...</div>
+            ) : null}
+          </div>
+
+          <div className="grid gap-3">
+            {notes.map((note) => (
+              <div
+                key={note.id}
+                className="flex items-start justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2"
+              >
+                <div>
+                  <div className="text-sm text-white/90">{note.title}</div>
+                  <div className="text-xs text-white/40 whitespace-pre-line">
+                    {note.content}
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleEditNote(note.id)}
+                  className="px-3 py-1.5 rounded-lg bg-white/10 text-xs text-white/80 hover:bg-white/20"
+                >
+                  Edit
+                </button>
+              </div>
+            ))}
+            {notes.length === 0 && !noteLoading ? (
+              <div className="text-xs text-white/40">No notes yet.</div>
+            ) : null}
+          </div>
+        </div>
+
         {error ? <div className="text-sm text-white/60">{error}</div> : null}
       </div>
     </div>
   );
 }
+

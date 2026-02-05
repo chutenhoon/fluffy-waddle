@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+﻿import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "../api/client";
 import Loading from "../components/Loading";
 import AudioCard from "../components/AudioCard";
@@ -22,8 +22,8 @@ export default function Audio() {
   if (isLoading) {
     return (
       <Loading
-        title="Doi xi nha"
-        subtitle="Dang gom lai cac doan ghi am."
+        title="Đợi xíu nha"
+        subtitle="Đang gom lại các đoạn ghi âm."
       />
     );
   }
@@ -32,9 +32,9 @@ export default function Audio() {
     <div className="min-h-screen px-5 py-8 md:px-10">
       <div className="max-w-[1400px] mx-auto space-y-6">
         <div>
-          <h1 className="text-xl font-medium text-white">Âm Thanh</h1>
+          <h1 className="text-xl font-medium text-white">Âm thanh</h1>
           <p className="text-sm text-white/50">
-            Cac doan ghi am tu ky uc.
+            Các đoạn ghi âm từ ký ức.
           </p>
         </div>
 
@@ -44,7 +44,7 @@ export default function Audio() {
           ))}
           {(data || []).length === 0 ? (
             <div className="text-white/50 text-sm">
-              Chua co am thanh nao.
+              Chưa có âm thanh nào.
             </div>
           ) : null}
         </div>

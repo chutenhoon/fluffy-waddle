@@ -1,25 +1,19 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { apiFetchVoid } from "../api/client";
 import { useSearch } from "../contexts/SearchContext";
 
 type MenuItem = {
   label: string;
-  to?: string;
-  action?: () => void;
+  to: string;
 };
 
 const menuItems: MenuItem[] = [
-  { label: "Video", to: "/" },
-  { label: "Hình Ảnh", to: "/images" },
-  { label: "Âm Thanh", to: "/audio" },
-  { label: "Ghi Chú", to: "/notes" },
-  {
-    label: "Web",
-    action: () => {
-      window.location.href = "/webmemory/index.html";
-    }
-  }
+  { label: "Video", to: "/videos" },
+  { label: "Hình ảnh", to: "/images" },
+  { label: "Âm thanh", to: "/audio" },
+  { label: "Ghi chú", to: "/notes" },
+  { label: "Web", to: "/web" }
 ];
 
 export default function Navbar() {
@@ -51,6 +45,7 @@ export default function Navbar() {
 
   useEffect(() => {
     setDrawerOpen(false);
+    setMobileSearchOpen(false);
   }, [location.pathname]);
 
   const handleLogout = async () => {
@@ -61,33 +56,19 @@ export default function Navbar() {
   const drawerItems = useMemo(
     () =>
       menuItems.map((item) => {
-        const isActive = item.to && location.pathname === item.to;
+        const isActive =
+          location.pathname.startsWith(item.to) ||
+          (item.to === "/videos" && location.pathname.startsWith("/watch"));
         const base =
           "flex items-center justify-between rounded-xl px-3 py-2 text-sm transition";
         const active = isActive
           ? "bg-white/15 text-white"
           : "text-white/70 hover:text-white hover:bg-white/10";
 
-        if (item.action) {
-          return (
-            <button
-              key={item.label}
-              type="button"
-              onClick={() => {
-                setDrawerOpen(false);
-                item.action?.();
-              }}
-              className={`${base} ${active}`}
-            >
-              <span>{item.label}</span>
-            </button>
-          );
-        }
-
         return (
           <Link
             key={item.label}
-            to={item.to || "/"}
+            to={item.to}
             className={`${base} ${active}`}
           >
             <span>{item.label}</span>
@@ -97,11 +78,20 @@ export default function Navbar() {
     [location.pathname]
   );
 
+  const brand = (
+    <Link to="/" className="flex flex-col items-center md:items-start">
+      <span className="text-lg font-medium text-white">Memory Vault</span>
+      <span className="text-xs text-white/50 hidden md:block">
+        Private moments, held in quiet glass.
+      </span>
+    </Link>
+  );
+
   return (
     <>
       <nav className="sticky top-0 z-40 border-b border-white/10 bg-ink/80 backdrop-blur-xl">
         <div className="max-w-[1400px] mx-auto px-5 md:px-10">
-          <div className="flex items-center gap-4 py-4">
+          <div className="hidden md:flex items-center gap-4 py-4">
             <div className="flex items-center gap-3 flex-none">
               <button
                 type="button"
@@ -115,14 +105,7 @@ export default function Navbar() {
                   <span className="block h-0.5 w-4 bg-current opacity-60" />
                 </div>
               </button>
-              <div>
-                <div className="text-lg font-medium text-white">
-                  Memory Vault
-                </div>
-                <div className="text-xs text-white/50 hidden md:block">
-                  Private moments, held in quiet glass.
-                </div>
-              </div>
+              {brand}
             </div>
 
             <div className="flex-1 hidden md:flex justify-center">
@@ -130,7 +113,7 @@ export default function Navbar() {
                 <input
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search"
+                  placeholder="Tìm kiếm"
                   className="w-full rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 focus:outline-none focus:ring-1 focus:ring-white/20"
                 />
                 <div className="absolute right-1 top-1 bottom-1 px-3 rounded-full bg-white/10 text-white/70 flex items-center justify-center">
@@ -147,9 +130,37 @@ export default function Navbar() {
 
             <div className="flex items-center justify-end gap-3 flex-none">
               <button
+                onClick={handleLogout}
+                className="text-sm text-white/60 hover:text-white/90 transition"
+              >
+                Khóa
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-[auto,1fr,auto] items-center gap-3 py-3 md:hidden">
+            <button
+              type="button"
+              onClick={() => setDrawerOpen(true)}
+              className="h-10 w-10 rounded-full bg-white/10 text-white/80 flex items-center justify-center transition hover:bg-white/15"
+              aria-label="Open menu"
+            >
+              <div className="space-y-1">
+                <span className="block h-0.5 w-4 bg-current" />
+                <span className="block h-0.5 w-4 bg-current opacity-80" />
+                <span className="block h-0.5 w-4 bg-current opacity-60" />
+              </div>
+            </button>
+
+            <div className="flex items-center justify-center">
+              {brand}
+            </div>
+
+            <div className="flex items-center justify-end gap-2">
+              <button
                 type="button"
                 onClick={() => setMobileSearchOpen((prev) => !prev)}
-                className="md:hidden h-9 w-9 rounded-full bg-white/10 text-white/70 flex items-center justify-center"
+                className="h-9 w-9 rounded-full bg-white/10 text-white/70 flex items-center justify-center"
                 aria-label="Search"
               >
                 <svg
@@ -162,9 +173,12 @@ export default function Navbar() {
               </button>
               <button
                 onClick={handleLogout}
-                className="text-sm text-white/60 hover:text-white/90 transition"
+                className="h-9 w-9 rounded-full bg-white/10 text-white/70 flex items-center justify-center"
+                aria-label="Lock"
               >
-                Lock
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
+                  <path d="M6 10V8a6 6 0 1 1 12 0v2h1a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1h1zm2 0h8V8a4 4 0 1 0-8 0v2z" />
+                </svg>
               </button>
             </div>
           </div>
@@ -175,7 +189,7 @@ export default function Navbar() {
                 <input
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search"
+                  placeholder="Tìm kiếm"
                   className="w-full rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 focus:outline-none focus:ring-1 focus:ring-white/20"
                 />
                 <div className="absolute right-1 top-1 bottom-1 px-3 rounded-full bg-white/10 text-white/70 flex items-center justify-center">

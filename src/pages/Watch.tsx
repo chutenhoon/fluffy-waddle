@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+﻿import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiFetch } from "../api/client";
@@ -82,8 +82,8 @@ export default function Watch() {
   if (isLoading) {
     return (
       <Loading
-        title="Doi xi nha"
-        subtitle="Dang tai video de phat muot hon."
+        title="Đợi xíu nha"
+        subtitle="Đang tải video để phát mượt hơn."
       />
     );
   }
@@ -105,7 +105,7 @@ export default function Watch() {
       >
         <div className="flex flex-col gap-2">
           <Link to="/" className="text-sm text-white/60 hover:text-white/90">
-            Back to vault
+            Quay lại trang chính
           </Link>
           <h1 className="text-xl md:text-2xl font-medium text-white">
             {data.title}
@@ -129,13 +129,13 @@ export default function Watch() {
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h2 className="text-xs uppercase tracking-[0.3em] text-white/40">
-                    More to watch
+                    Xem thêm
                   </h2>
                   <Link
-                    to="/"
+                    to="/videos"
                     className="text-xs text-white/50 hover:text-white/80"
                   >
-                    View all
+                    Xem tất cả
                   </Link>
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -163,13 +163,13 @@ export default function Watch() {
               <aside className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h2 className="text-xs uppercase tracking-[0.3em] text-white/40">
-                    More to watch
+                    Xem thêm
                   </h2>
                   <Link
-                    to="/"
+                    to="/videos"
                     className="text-xs text-white/50 hover:text-white/80"
                   >
-                    View all
+                    Xem tất cả
                   </Link>
                 </div>
                 <div className="grid gap-4">
